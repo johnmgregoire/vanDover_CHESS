@@ -105,7 +105,7 @@ def imap_gen(qimage, qgrid):
         imap[(qimage>=qmin)&(qimage<=qmax)]=count+1
     return imap
 
-def interp(func, y, xcrit):
+def interp(func, y, xcrit, maxtries=20):
     #func must be monotonic, y should be at least length 3
     trylist=list(y)
     trylist.sort
@@ -117,9 +117,9 @@ def interp(func, y, xcrit):
             del tryans[i]
         else:
             i+=1
-    maxtries=20
+    
     tries=0
-    while tries<maxtries and not(len(trylist)>=4 and xcrit>=min(tryans) and xcrit<=max(tryans)):
+    while tries<maxtries and not (len(trylist)>=4 and xcrit>=min(tryans) and xcrit<=max(tryans)):
         tries+=1
         hightry=trylist[-1]*(1.0+0.2*tries**2)
         lowtry=trylist[0]/(1.0+0.2*tries**2)
@@ -131,13 +131,34 @@ def interp(func, y, xcrit):
         if highans!=tryans[-1]:
             trylist=trylist+[hightry]
             tryans=tryans+[highans]
+    tries=0
+    if len(trylist)<2:
+        tries=maxtries
+    while tries<maxtries and not (len(trylist)>=4):
+        tries+=1
+        temp=2**tries
+        newtrys=numpy.linspace(1./2**temp,1-1./2**temp,2**(temp-1))
+        newtrys=list(trylist[0]+(trylist[-1]-trylist[0])*newtrys)
+        even=False
+        while len(newtrys)>0 and not (len(trylist)>=4):
+            even=not even
+            temp=newtrys.pop((even and (0, ) or (-1, ))[0])#switch between trying next highest and next lowest
+            ans=func(temp)
+            if ans in tryans:
+                if ans==tryans[0]:#move the outer boundaries in so searching is more efficient
+                   trylist[0]=temp
+                if ans==tryans[-1]:
+                   trylist[-1]=temp
+            else:
+                trylist=sorted(trylist+[temp])
+                tryans=sorted(tryans+[temp])
 
     if tries==maxtries:
         print 'interp problem'
         return None
     if tryans!=tryans.sort:
         trylist.sort
-    print 'in interp', xcrit, tryans, trylist
+    #print 'in interp', xcrit, tryans, trylist
     ycrit=scipy.interpolate.UnivariateSpline(tryans, trylist)(xcrit)[0]
     if numpy.isnan(ycrit):
         print 'interp problem'
@@ -541,7 +562,7 @@ def find2darrayzeros(x, y, z):#x and y are 1d arrays and z is the 2d surface. fi
         
     xi, yi=numpy.where(zb)
     if len(xi)>0:
-        wt=numpy.sum(1./numpy.abs(numpy.float32([z[xi, yi], z[xi+1, yi], z[xi, yi+1], z[xi+1, yi+1]])), axis=0)
+        wt=numpy.sum(1./numpy.abs(numpy.float32([z[xi, yi], z[xi+1, yi], z[xi, yi+1], z[xi+1, yi+1]])), axis=0)#wieght by 1/abs(z)
         xv=numpy.float32([x[inds]/numpy.abs(z[inds, othinds]) for inds in (xi, xi+1) for othinds in (yi, yi+1)]).sum(axis=0)/wt
         yv=numpy.float32([y[inds]/numpy.abs(z[othinds, inds]) for inds in (yi, yi+1) for othinds in (xi, xi+1)]).sum(axis=0)/wt
         return True, xv, yv
@@ -2063,3 +2084,164 @@ def readblin(h5mar, bin=0):
     if bin:
         bs=[b+'bin%d' %bin for b in bs]
     return numpy.array([readh5pyarray(h5mar[b]) for b in bs]), numpy.array([h5mar[b].attrs['weights'][:] for b in bs]).T
+
+
+class calc_blin_factors():#can be used for 1-d or 2-d data if for 2-d you collaps it to 1-d using killmap indeces
+#assumes all have been scaled by IC3
+    def __init__(self, data, b0, b1, f0=0.5, f1=0.5, fraczeroed=0.005, factorprecision=0.005, maxtries=100, refineduringloop=True):
+        self.warning=''
+        self.fz=fraczeroed
+        self.fp=factorprecision
+
+        self.dtype=data.dtype
+        
+        self.data=data
+        self.b0=b0
+        self.b1=b1
+        self.numpix=numpy.array(data.shape).prod()
+        #print 'self.numpix', self.numpix
+        
+        b0counts=self.b0.sum()
+        b1counts=self.b1.sum()
+        delcounts=min(b0counts, b1counts)*self.fp
+        delf0=delcounts/(1.0*b0counts)
+        delf1=delcounts/(1.0*b1counts)
+        self.f0=f0
+        self.f1=f1
+        #print [self.fracz_gain(x) for x in numpy.array([.1, .3, 0.8, 0.9, 1.0, 1.1, 1.2, 2., 5., 10.])]
+        
+        self.gain=interp(self.fracz_gain, numpy.array([.1, .3, 0.8, 0.9, 1.0, 1.1, 1.2, 2., 5., 10.]), self.fz, maxtries=maxtries)
+        self.gaincheck()
+        self.f0*=self.gain
+        self.f1*=self.gain
+        fznow=self.fracz_f0f1(self.f0, self.f1)
+        fz0up=self.fracz_f0f1(self.f0+delf0, self.f1-delf1)
+        fz1up=self.fracz_f0f1(self.f0-delf0, self.f1+delf1)
+        tries=0
+        #print 'starting it ', self.f0, self.f1, fznow, fz0up, fz1up
+        while ((fz0up<=fznow) or (fz1up<=fznow)) and tries<maxtries:
+            tries+=1
+            bool0up=fz0up<fznow
+            bool1up=fz1up<fznow
+            if fz0up==fznow:
+                temp=self.btot_gen(self.f0, self.f1)
+                temp2=self.btot_gen(self.f0+delf0, self.f1-delf1)
+                bool0up=temp2[temp2>self.data].sum()<temp[temp>self.data].sum()#if no change in fraczeroed, but the totals counts over the bcknd is reduced, do it
+            elif fz1up==fznow:
+                temp=self.btot_gen(self.f0, self.f1)
+                temp2=self.btot_gen(self.f0-delf0, self.f1+delf1)
+                bool1up=temp2[temp2>self.data].sum()<temp[temp>self.data].sum()
+            if bool0up:
+                self.f0+=delf0
+                self.f1-=delf1
+            elif bool1up:
+                self.f0-=delf0
+                self.f1+=delf1
+            else:
+                break
+            trylist=numpy.array(range(4))*self.fp+1
+            temp=interp(self.fracz_gain, trylist, self.fz, maxtries=maxtries)
+            if temp is None:
+                print "INTERPOLATION ERROR increasing gain:", trylist
+                self.gain=1.
+                self.gaincheck()
+                self.gainrefine()
+            else:
+                self.gain=temp
+                self.gaincheck()
+                #print 'after gain check ', self.gain, self.fracz_gain(self.gain)
+                if refineduringloop:
+                    self.gainrefine()
+                    #print 'after gain refine ', self.gain, self.fracz_gain(self.gain)
+            self.f0*=self.gain
+            self.f1*=self.gain
+            fznow=self.fracz_f0f1(self.f0, self.f1)
+            fz0up=self.fracz_f0f1(self.f0+delf0, self.f1-delf1)
+            fz1up=self.fracz_f0f1(self.f0-delf0, self.f1+delf1)
+            #print self.f0, self.f1, fznow, fz0up, fz1up
+        if not tries<maxtries:
+            self.warning+='iterative determination of blin factors ended by max iterations\n'
+        
+        self.gain=1.
+        self.gainrefine()
+        self.f0*=self.gain
+        self.f1*=self.gain
+        totbcknd=self.btot_gen(self.f0, self.f1)
+        
+        self.fracz=(totbcknd>self.data).sum()/numpy.float32(self.numpix)
+        #print self.f0, self.f1, self.fracz
+        #self.plot()
+
+    def gaincheck(self, maxallowed=0.99):#if comes in bwteen 0 and maxallowed nothing done, otherwise gets it between 0 and maxallowed
+        fz=self.fracz_gain(self.gain)
+        if fz>0.:
+            return
+        shrinkfactor=1.
+        while fz==0.:
+            self.gain+=self.fp/shrinkfactor
+            fz=self.fracz_gain(self.gain)
+            if fz>maxallowed:
+                fz=0.
+                self.gain-=self.fp/shrinkfactor
+                shrinkfactor*=2.
+    def gainrefine(self):
+        lowbool=self.fracz_gain(self.gain)<self.fz
+        newlowbool=lowbool
+        delgain=(lowbool*2.-1.)*self.fp
+        while lowbool==newlowbool:
+            self.gain+=delgain
+            newlowbool=self.fracz_gain(self.gain)<self.fz
+        if lowbool: #use the factors that low-ball the nz
+            self.gain-=delgain
+        self.gaincheck(maxallowed=self.fz)
+
+    def fracz_f0f1(self, f0, f1):
+        return (self.btot_gen(f0, f1)>self.data).sum(dtype='float32')/self.numpix
+    def fracz_gain(self, gain):
+        return self.fracz_f0f1(self.f0*gain, self.f1*gain)
+    def btot_gen(self, f0, f1):
+        return self.b0*f0+self.b1*f1
+    def plot(self):
+        pylab.plot(self.data, label='data')
+        pylab.plot(self.b0, label='b0')
+        pylab.plot(self.b1, label='b1')
+        pylab.plot(self.btot_gen(self.f0, self.f1), label='totb')
+        pylab.legend()
+        pylab.show()
+
+def f0_f1_exp_ic(exposures_data, ic_data, exposures_b0, ic_b0, exposures_b1, ic_b1):#this can be used to get the weights used to match 2 vectros to a data vector using any 2 linear independant components, in this case ion counts and number of exposures
+    c=ic_data
+    e=exposures_data
+    c0=ic_b0
+    e0=exposures_b0
+    c1=ic_b1
+    e1=exposures_b1
+    if e0==0 and c0==0:
+        f0=0
+        f1=1
+    elif e1==0 and c1==0:
+        f0=1
+        f1=0
+    elif e0==0:#b0 is pure c
+        f0=c/c0
+        if e1==0:
+            f1=0.
+        else:
+            f1=e/e1
+    elif (c1-c0*e1/e0)==0:
+        if c0==0:
+            f0=e/e0
+            if c1==0:
+                f1=0.
+            else:
+                f1=c/c1
+        else:
+            f0=(c/c0+e/e0)/2. #this is just a guess of something resonable to do in this strange condition (c1-c0*e1/e0)==0:
+            if c1==0 or e1==0:
+                f1=0.
+            else:
+                f1=((c-f0*c0)/c1+(e-f0*e0)/e1)/2.
+    else: #this is the soltuion to the linear set of equations, as long as no divisors are zero
+        f1=(c-c0*e/e0)/(c1-c0*e1/e0)
+        f0=(e-f1*e1)/e0
+    return f0, f1

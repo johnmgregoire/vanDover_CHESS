@@ -725,9 +725,40 @@ class MainMenu(QMainWindow,
                         return
                 writedepprof(self.h5path, self.h5groupstr, gunpropdict, mdq)
 
-
-
-
+    @pyqtSignature("")
+    def on_actionLinBcknd1d_triggered(self):
+        perform=False
+        if self.activepathcheckBox.isChecked() and unicode(self.active_file_lineEdit.text())==self.activepathcompare:
+            perform=True
+        else:
+            temp = mygetopenfile(self, xpath=self.h5path,markstr='.h5 file for Deposition Profile calculation')
+            if temp!='':
+                if self.default_scan_checkBox.isChecked():
+                    tempgrp=getdefaultscan(temp)
+                    if tempgrp is None:
+                        QMessageBox.warning(self,"failed",  'No default grp found - run initialize')
+                        perform=False
+                    else:
+                        self.h5path=temp
+                        self.h5groupstr=tempgrp
+                        self.updateactivepath()
+                        perform=True
+                else:
+                    idialog=getgroupDialog(self, temp)
+                    if idialog.exec_():
+                        self.h5path=temp
+                        self.h5groupstr=str(unicode(idialog.groupsComboBox.currentText()))
+                        self.updateactivepath()
+                        perform=True
+        if perform:
+            idialog=LinBckndDialog1d(self, self.h5path, self.h5groupstr)
+            if not (idialog.exec_() and idialog.perform):
+                return
+            othparstr=', f0vals='+ `idialog.fvals[0]`# not finished implementing
+            othparstr+=', f1vals='+ `idialog.fvals[1]`
+            othparstr+=', fraczeroed=%0.3f' %idialog.zerofracSpinBox.value()
+            othparstr+=', fprecision=%0.3f, rankfornorm=%0.3f' %(idialog.precisionSpinBox.value(), idialog.normrankSpinBox.value())
+            self.addtask(''.join(("linbckndsub1d(h5path='", self.h5path, "', h5groupstr='", self.h5groupstr, othparstr,  ")")))
     @pyqtSignature("")
     def on_action_calc_bcknd_triggered(self):
         perform=False
@@ -824,7 +855,7 @@ class MainMenu(QMainWindow,
                     h5groupstr_from=str(unicode(idialog.groupsComboBox.currentText()))
                     perform=True
         if perform:
-            self.addtask('CopyLinBckndData(%s, %s, %s, %s)' %(h5path, h5groupstr, h5path_from, h5groupstr_from))
+            self.addtask("CopyLinBckndData('%s', '%s', '%s', '%s')" %(self.h5path, self.h5groupstr, h5path_from, h5groupstr_from))
 
     @pyqtSignature("")
     def on_action_process_1d_triggered(self):
@@ -2466,8 +2497,8 @@ class bckndinventoryDialog(QDialog,
         if not h5groupstr is None:
             self.h5groupstr=h5groupstr
             self.h5analysis=self.h5file['/'.join((self.h5groupstr, 'analysis'))]
-            self.h5mar=self.h5file['/'.join((self.h5groupstr, 'analysis', getxrdname(h5analysis)))]
-            self.h5marcounts=self.h5file['/'.join((self.h5groupstr,'measurement/'+getxrdname(h5analysis)+'/counts'))]
+            self.h5mar=self.h5file['/'.join((self.h5groupstr, 'analysis', getxrdname(self.h5analysis)))]
+            self.h5marcounts=self.h5file['/'.join((self.h5groupstr,'measurement', getxrdname(self.h5analysis),'counts'))]
             self.attrdict=getattr(self.h5path, self.h5groupstr)
             chessrungrpname=self.attrdict['chessrunstr']
         else:
@@ -2476,6 +2507,7 @@ class bckndinventoryDialog(QDialog,
             chessrungrpname=''
             
         QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
+        QObject.connect(self.buttonBox,SIGNAL("rejected()"),self.ExitRoutine)
         QObject.connect(self.copyPushButton,SIGNAL("pressed()"),self.performcopy)
         
         
@@ -2493,10 +2525,11 @@ class bckndinventoryDialog(QDialog,
                 setindex=grpnames.index(chessrungrpname)
             else:
                 setindex=0
-            idialog=selectorDialog(self, grpnames, title='Select an h5chess group to store Bcknd images', setindex=setindex)
-            perform=idialog.exec_()
+            #idialog=selectorDialog(self, grpnames, title='Select an h5chess group to store Bcknd images', setindex=setindex)
+            #perform=idialog.exec_()
         if perform:
-            chessrungrpname=str(idialog.groupsComboBox.currentText())
+            #chessrungrpname=str(idialog.groupsComboBox.currentText())
+            chessrungrpname=grpnames[setindex]#override the choice because was not working 20Jan2011
             self.h5chessgrp=self.h5chess[chessrungrpname]
             if 'BckndInventory' in self.h5chessgrp:
                 self.h5chessgrp=self.h5chessgrp['BckndInventory']
@@ -2516,6 +2549,11 @@ class bckndinventoryDialog(QDialog,
                     self.imagenamelist+=[bname]
             for counter, nam in enumerate(self.imagenamelist):
                 self.imageComboBox.insertItem(counter, nam)
+            print chessrungrpname, self.imagenamelist
+#            self.imageComboBox.setCurrentIndex(self.imagenamelist.index('image index 0'))
+#            self.newnameLineEdit.setText('NoSample_75s')
+#            self.performcopy()
+#            self.ExitRoutine()
         else:
             self.ExitRoutine()
     
@@ -2525,35 +2563,58 @@ class bckndinventoryDialog(QDialog,
         if nam in self.h5chessgrp and not (self.overwriteCheckBox.isChecked()):
             self.MsgLabel.setText('FAILED: Bcknd Image with that name already exists')
             return
-        try:
-            pnt=self.imagepointlist[self.imageComboBox.currentIndex()]
-            d={}
-            if isinstance(pnt, tuple):
-                print pnt
-                arr=pnt[0][pnt[1]]
-                print arr.shape
-                print pnt[0].file.filename
-                d['sourcefile']=pnt[0].file.filename
-                print pnt[0].name
-                d['sourcename']=pnt[0].name
-                print pnt[1]
-                d['sourcearrayindex']=pnt[1]
+        #try:
+        pnt=self.imagepointlist[self.imageComboBox.currentIndex()]
+        d={}
+        if isinstance(pnt, tuple):
+            print pnt
+            arr=pnt[0][pnt[1]]
+            print arr.shape
+            print pnt[0].file.filename
+            d['sourcefile']=pnt[0].file.filename
+            print pnt[0].name
+            d['sourcename']=pnt[0].name
+            print pnt[1]
+            d['sourcearrayindex']=pnt[1]
+            if 'scalar_data' in pnt[0].parent.parent:
+                sdg=pnt[0].parent.parent['scalar_data']
+                for ds in sdg.itervalues():
+                    if isinstance(ds, h5py.Dataset):
+                        k=ds.name.rpartition('/')[2]
+                        if len(ds.shape)==0:
+                            v=ds.value
+                        elif len(ds.shape)==1:
+                            v=ds[pnt[1]]
+                        d[k]=v
+                        print 'scalar ', k, v
             else:
-                print pnt
-                arr=readh5pyarray(pnt)
-                d['sourcefile']=arr.file.filename
-                d['sourcename']=arr.name
-                d['sourcearrayindex']=''
-            if nam in self.h5chessgrp:
-                del self.h5chessgrp[nam]
-            h5ds=self.h5chessgrp.create_dataset(nam, data=arr)
-            for key, val in d.iteritems():
-                h5ds.attrs[key]=val
-            self.MsgLabel.setText('%s successfully added to inventory' %nam)
-        except:
-            self.MsgLabel.setText('FAILED: fatal error, probably problem with name')
+                print 'scalar data not copied to BckndInventory for ', nam
+            for k, v in pnt[0].attrs.iteritems():
+                if isinstance(v, list) or isinstance(v, numpy.ndarray):
+                    v=v[pnt[1]]
+
+                if k=='mod_multiplierarray' and v!=1.:
+                    QMessageBox.warning(self,'It seems that this bcknd image was modified from raw data - this is discouraged for BckdnInventory')
+                d[k]=v
+        else:
+            print pnt
+            arr=readh5pyarray(pnt)
+            d['sourcefile']=arr.file.filename
+            d['sourcename']=arr.name
+            d['sourcearrayindex']=''
+            for k, v in pnt.attrs.iteritems():
+                d[k]=v
+        if nam in self.h5chessgrp:
+            del self.h5chessgrp[nam]
+        h5ds=self.h5chessgrp.create_dataset(nam, data=arr)
+        for key, val in d.iteritems():
+            h5ds.attrs[key]=val
+        self.MsgLabel.setText('%s successfully added to inventory' %nam)
+#        except:
+#            self.MsgLabel.setText('FAILED: fatal error, probably problem with name')
             
     def ExitRoutine(self):
+        print 'BckndInventory Exit'
         self.h5file.close()
         self.h5chess.close()
         
@@ -2652,6 +2713,100 @@ class LinBckndDialog(QDialog,
         self.h5chess.close()
         self.perform=True
 
+class LinBckndDialog1d(QDialog,
+        ui_LinBckndDialog.Ui_LinBckndDialog):# not finished implementing
+
+    def __init__(self, parent, h5path, h5groupstr):
+        super(LinBckndDialog, self).__init__(parent)
+        self.setupUi(self)
+        #***
+        self.h5path=h5path
+        self.h5groupstr=h5groupstr
+        self.h5file=h5py.File(self.h5path, mode='r+')
+        h5analysis=self.h5file['/'.join((self.h5groupstr, 'analysis'))]
+#        self.h5mar=self.h5file['/'.join((self.h5groupstr, 'analysis', getxrdname(h5analysis)))]
+#        h5marcounts=self.h5file['/'.join((self.h5groupstr,'measurement/'+getxrdname(h5analysis)+'/counts'))]
+        attrdict=getattr(self.h5path, self.h5groupstr)
+        
+        QObject.connect(self.buttonBox,SIGNAL("accepted()"),self.ExitRoutine)
+        QObject.connect(self.buttonBox,SIGNAL("rejected()"),self.CancelledExitRoutine)
+
+        self.imagepointlist=[]
+        self.imagenamelist=[]
+        self.h5chess=CHESSRUNFILE()
+        h5chessrun=self.h5chess[attrdict['chessrunstr']]
+        if 'BckndInventory' in h5chessrun:
+            bckndgrppoint=h5chessrun['BckndInventory']
+            for dset in bckndgrppoint.iterobjects():
+                if isinstance(dset,h5py.Dataset):
+                    self.imagepointlist+=[dset]
+                    self.imagenamelist+=['bcknd inventory: '+dset.name.rpartition('/')[2]]
+#        for counter, c in enumerate(h5marcounts):
+#            if numpy.max(c[:, :])>0:
+#                self.imagepointlist+=[(h5marcounts, counter)]
+#                self.imagenamelist+=['this data, image index %d' %counter]
+#        for bname in ['bmin', 'bave', 'blin0', 'blin1']:#blin0 and blin1 have to be last so when they are omitted that doesn't change the indexing of imagepointlist
+#            if bname in self.h5mar:
+#                self.imagepointlist+=[self.h5mar[bname]]
+#                self.imagenamelist+=[bname]
+        for counter, nam in enumerate(self.imagenamelist):
+            for cb, notallowed in zip([self.imageComboBox0, self.imageComboBox1], ['blin0', 'blin1']):
+                if nam!=notallowed:
+                    cb.insertItem(counter, nam)
+        self.perform=False
+    
+    def CancelledExitRoutine(self):
+        self.h5file.close()
+        self.h5chess.close()
+
+    def ExitRoutine(self):
+        
+        for cb, nam, twle in zip([self.imageComboBox0, self.imageComboBox1], ['blin0', 'blin1'], [self.imagefracLineEdit0, self.imagefracLineEdit1]):
+            d={}
+            try:
+                d['trialimageweights']=numpy.float32(eval('['+str(twle.text())+']'))
+            except:
+                h5file.close()
+                if not self.h5chess is None:
+                    self.h5chess.close()
+                print
+                QMessageBox.warning(self,"syntax error",  "Aborting because the list of trial wieghts did not convert to array correctly.\nThe enetered string has been printed.\nSome blin data in .h5 may have been deleted.")
+                self.perform=False
+                return
+            pnt=self.imagepointlist[cb.currentIndex()]
+            
+            if isinstance(pnt, tuple):
+                print 'reading ', pnt[0].name
+                arr=pnt[0][pnt[1]]
+                d['sourcefile']=pnt[0].file .filename
+                d['sourcename']=pnt[0].name
+                d['sourcearrayindex']=pnt[1]
+            else:
+                print 'reading ', pnt.name
+                arr=readh5pyarray(pnt)
+                d['sourcefile']=pnt.file.filename
+                d['sourcename']=pnt.name
+                d['sourcearrayindex']=''
+            dellist=[]
+            if nam in self.h5mar:
+                for pnt in self.h5mar.itervalues():
+                    if isinstance(pnt,h5py.Dataset):
+                        print pnt.name
+                        print pnt.name.rpartition('/')[2]
+                        temp=pnt.name.rpartition('/')[2]
+                        if nam in temp:#this gets rid of all the blin0bin$
+                            dellist+=[temp]
+            print dellist
+            for temp in dellist:
+                del self.h5mar[temp]
+                
+            h5ds=self.h5mar.create_dataset(nam, data=arr)
+            for key, val in d.iteritems():
+                h5ds.attrs[key]=val
+            
+        self.h5file.close()
+        self.h5chess.close()
+        self.perform=True
 
 class highlowDialog(QDialog,
         ui_highlowDialog.Ui_highlowDialog):
@@ -2679,9 +2834,9 @@ class importh5scanDialog(QDialog,
             print grp.name.rpartition('/')[2]
             if isinstance(grp,h5py.Group):
                 #the below conditions means that the data must have this h5 format to analyze the data. if these conditions need to be loosened, the importattrDialog routines should allow user entry of the spec info
-                if ('samx' in grp['measurement/scalar_data'] and len(grp['measurement/scalar_data/samx'].shape)==1) or ('samz' in grp['measurement/scalar_data/'] and len(grp['measurement/scalar_data/samz'].shape)==1):
-                    if 'acquisition_command' in grp.attrs:
-                        self.scanComboBox.insertItem(99,':'.join((grp.name.rpartition('/')[2], grp.attrs['acquisition_command'])))
+                #if ('samx' in grp['measurement/scalar_data'] and len(grp['measurement/scalar_data/samx'].shape)==1) or ('samz' in grp['measurement/scalar_data/'] and len(grp['measurement/scalar_data/samz'].shape)==1):
+                if 'acquisition_command' in grp.attrs:
+                    self.scanComboBox.insertItem(99,':'.join((grp.name.rpartition('/')[2], grp.attrs['acquisition_command'])))
 
 #    def numcvt(self, num):
 #        if numpy.abs(num-round(num))<0.005:
@@ -4650,7 +4805,7 @@ class plotimapwindow(QDialog):
         self.savename2=''.join((self.savename2, '_q', t1, ' to ', t2))
         self.imgLabel.setText(''.join(('plot of image ',self.savename2)))
         self.plotw.fig.canvas.draw()
-        print 'stopping', ASDGADF
+        #print 'stopping', ASDGADF
 
     def drawimap(self):
         self.binbool=self.binCheckBox.isChecked()
@@ -5319,6 +5474,7 @@ class plot1dintwindow(QDialog):
 #            self.plotw.fig.canvas.draw()
 
     def calc1dbcknd(self): #only supported for 'h5mar' type
+        h5file=h5py.File(self.h5path, mode='r')
         h5analysis=h5file['/'.join((self.h5groupstr, 'analysis'))]
         h5mar=h5file['/'.join((self.h5groupstr, 'analysis', getxrdname(h5analysis)))]
         ibmin=h5mar['ibmin']
@@ -5381,8 +5537,10 @@ class plot1dintwindow(QDialog):
 
         self.savename2='1dbckndalteration'
         self.imgLabel.setText(self.savename2)
+        h5file.close()
 
     def save1dbcknd(self):
+        h5file=h5py.File(self.h5path, mode='r+')
         h5analysis=h5file['/'.join((self.h5groupstr, 'analysis'))]
         h5mar=h5file['/'.join((self.h5groupstr, 'analysis', getxrdname(h5analysis)))]
         icountspoint=h5mar['icounts']

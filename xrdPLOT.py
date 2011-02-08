@@ -333,24 +333,28 @@ class subnavigatorwidget(FigureCanvas):
         self.performplot()
 
     def plotpoints(self, includelist,  excludelist, select=None):
-        self.includelist=includelist
-        self.excludelist=excludelist
-        temparr=numpy.float32([self.xgrid[1], self.zgrid[1]])
-        self.clickradiusmm=numpy.min(temparr[temparr!=0.])/2.0
-        if min(self.xgrid[1], self.zgrid[1])*self.pixpermm>7:
-            self.inmark='g.'
-            self.outmark='m.'
-        else:
-            self.inmark='g,'
-            self.outmark='m,'
+        try:
+            self.includelist=includelist
+            self.excludelist=excludelist
+            temparr=numpy.float32([self.xgrid[1], self.zgrid[1]])
+            self.clickradiusmm=numpy.min(temparr[temparr!=0.])/2.0
+            if min(self.xgrid[1], self.zgrid[1])*self.pixpermm>7:
+                self.inmark='g.'
+                self.outmark='m.'
+            else:
+                self.inmark='g,'
+                self.outmark='m,'
 
-        self.inxvals,  self.inzvals = (self.xcoords[numpy.int16(self.includelist)], self.zcoords[numpy.int16(self.includelist)])
-        self.exxvals, self.exzvals = (self.xcoords[numpy.int16(self.excludelist)], self.zcoords[numpy.int16(self.excludelist)])
-        if select is not None:
-            self.xsel, self.zsel =(self.xcoords[numpy.int16(select)], self.zcoords[numpy.int16(select)])
-        else:
-            self.xsel, self.zsel = (None, None)
-        self.performplot()
+            self.inxvals,  self.inzvals = (self.xcoords[numpy.int16(self.includelist)], self.zcoords[numpy.int16(self.includelist)])
+            self.exxvals, self.exzvals = (self.xcoords[numpy.int16(self.excludelist)], self.zcoords[numpy.int16(self.excludelist)])
+            if select is not None:
+                self.xsel, self.zsel =(self.xcoords[numpy.int16(select)], self.zcoords[numpy.int16(select)])
+            else:
+                self.xsel, self.zsel = (None, None)
+            self.performplot()
+        except:
+            print 'There was a problem plotting the points so dont use the points navigator'
+            pass
 
     def myclick(self, event):
 #        xmm=(event.x-self.xpixshift)/self.pixpermm

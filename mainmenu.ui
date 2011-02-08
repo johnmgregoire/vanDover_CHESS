@@ -225,6 +225,7 @@ p, li { white-space: pre-wrap; }
     <addaction name="action_choose_data_subset"/>
     <addaction name="action_calc_bcknd"/>
     <addaction name="menuPerform_integration"/>
+    <addaction name="actionLinBcknd1d"/>
     <addaction name="action_process_1d"/>
     <addaction name="action_wavetrans1d"/>
     <addaction name="menu1d_peak_search"/>
@@ -691,6 +692,11 @@ p, li { white-space: pre-wrap; }
   <action name="action_copy_lin_bcknd">
    <property name="text">
     <string>copy &quot;linear bcknd&quot; source data from other .h5</string>
+   </property>
+  </action>
+  <action name="actionLinBcknd1d">
+   <property name="text">
+    <string>Linear Bcknd process 1d data</string>
    </property>
   </action>
  </widget>
