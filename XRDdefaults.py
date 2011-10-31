@@ -10,9 +10,9 @@ def attrdict_def():
     'counter':0.0,#0.0 means unspecified. positive number is number of seconds of exposure per frame, negative number is number of fluorescence counts on XFlash (IC2)
     'cal':[1596.3, 1753.4, 558.9, .181, 272],#[horizontal pixel of beam, vertical, detector dist in mm, detector tilt in deg, tilt direction in deg], the origin for the beam center is upper left pixel=(0,0), fit2D uses lower left=(1,1), these numbers are all assumed to come from fit2D
     'alpha':50, #sample tilt in deg where 0 is substrate perpendicular to beam. this is 90deg??360 but depends on chi???-phi in the 4circle goniometer
-    'bcknd':'min', #string for user to specify the type of background subtraction to be used in analysis
+    'bcknd':'lin', #string for user to specify the type of background subtraction to be used in analysis
     'wavelength':0.02066, #x-ray wavelength in nm
-    'xrdname':'mar345', 
+    'xrdname':'area_detector', 
     'psize':0.1, 
     }
 
@@ -61,10 +61,10 @@ def defaultdir(st):
 #    'pdfentries': 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS' \
 #    }
     d={\
-    'runlog' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12/runlogs', \
-    'h5' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12/h5analysis', \
-    'dataimport' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12',  \
-    'otherdata' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12',  \
+    'runlog' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011/runlogs', \
+    'h5' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011/h5analysis', \
+    'dataimport' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011',  \
+    'otherdata' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011',  \
     'pdfentries': 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS' \
     }
 
@@ -74,7 +74,7 @@ def defaultdir(st):
         return os.getcwd()
 
 def chessrun_def():
-    return '2010Mar'
+    return '2011'
 
 def CHESSRUNFILE(mode='r', returnpathonly=False):
     if mode!='r':

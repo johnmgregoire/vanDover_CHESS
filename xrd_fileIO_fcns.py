@@ -54,7 +54,7 @@ def readblin(h5mar, bin=0):
     bs=['blin0', 'blin1']
     if bin:
         bs=[b+'bin%d' %bin for b in bs]
-    return numpy.array([readh5pyarray(h5mar[b]) for b in bs]), numpy.array([h5mar[b].attrs['weights'][:] for b in bs]).T
+    return tuple([readh5pyarray(h5mar[b]) for b in bs]), numpy.array([h5mar[b].attrs['weights'][:] for b in bs]).T
 
 def getimapqgrid(chessh5dsetstr, imap=True,  qgrid=True, bin=0):
     h5chess=CHESSRUNFILE()
@@ -207,6 +207,15 @@ def numpts_attrdict(attrdict):
     else:
         return int(round(max(attrdict['xgrid'][2], attrdict['zgrid'][2])))
 
+def constructbckndarr_linbyposn(arrtup, ind):
+    x=[]
+    for a in arrtup:
+        if a.ndim==3:
+            x+=[a[ind]]
+        else:
+            x+=[a]
+    return numpy.array(x)
+
 def calcbcknd(h5path, h5groupstr, bcknd, bin=3, critfrac=0.05, weightprecision=0.01, normrank=0.5):
     """groupstr is to the main scan group,  e.g. XRD.PrimDataset. bcknd starts with 'min' or 'ave'"""
     print 'calculating ',  bcknd, ' background on ', h5path, h5groupstr
@@ -241,7 +250,7 @@ def calcbcknd(h5path, h5groupstr, bcknd, bin=3, critfrac=0.05, weightprecision=0
 
     if 'lin' in bcknd:
         data=h5marcounts[pointlist, :, :]
-        if len(data.shape)==2:#this happens if pointlist has only one element... I think
+        if data.ndim==2:#this happens if pointlist has only one element... I think
             data=numpy.array([data])
         killmap=getkillmap(h5analysis.attrs['killmapstr'])
         b0=readh5pyarray(h5mar['blin0'])
@@ -261,7 +270,11 @@ def calcbcknd(h5path, h5groupstr, bcknd, bin=3, critfrac=0.05, weightprecision=0
                 binnam='%sbin%d' %(nam, bin)
                 if binnam in h5mar:
                     del h5mar[binnam]
-                h5arbin=h5mar.create_dataset(binnam, data=binimage(bn, bin))
+                if bn.ndim==3:
+                    binbn=numpy.array([binimage(bnv, bin) for bnv in bn])
+                else:
+                    binbn=binimage(bn, bin)
+                h5arbin=h5mar.create_dataset(binnam, data=binbn)
                 for key, val in h5ar.attrs.iteritems():
                     h5arbin.attrs[key]=val
 
@@ -270,7 +283,7 @@ def calcbcknd(h5path, h5groupstr, bcknd, bin=3, critfrac=0.05, weightprecision=0
             print pointind
 
             data=h5marcounts[pointind, :, :]
-
+            
             if 'min' in bcknd:
                 if percind==1:
                     indeces=data<bcknddata
@@ -317,14 +330,17 @@ def calcbcknd(h5path, h5groupstr, bcknd, bin=3, critfrac=0.05, weightprecision=0
             calcbanom(h5path, h5groupstr, bqgrid=None, bin=bin)
 
 
-def integrate(h5path, h5groupstr, singleimage=None, bckndbool=True, ):#singleimage is a string that is an index of marcounts or a string for other dataset or 'banom#'. only marcounts can get backnd subtraction
+def integrate(h5path, h5groupstr, singleimage=None, bckndbool=True, normbydqchiimage=False):#singleimage is a string that is an index of marcounts or a string for other dataset or 'banom#'. only marcounts can get backnd subtraction
     performed=True
     h5file=h5py.File(h5path, mode='r')
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
     h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
 
     imap, qgrid=getimapqgrid(h5analysis.attrs['imapstr'])
-    dqchiimage=getdqchiimage(h5analysis.attrs['dqchiimagestr'])
+    if normbydqchiimage:
+        dqchiimage=getdqchiimage(h5analysis.attrs['dqchiimagestr'])
+    else:
+        dqchiimage=None
     slots=numpy.uint16(qgrid[2])
     killmap=getkillmap(h5analysis.attrs['killmapstr'])
     normalizer=integrationnormalization(killmap, imap, dqchiimage, slots)#if this normalizer ever changes there will need to be changes elsewhere, e.g. where bcknd is integrated for 1d subtraction
@@ -408,7 +424,7 @@ def integrate(h5path, h5groupstr, singleimage=None, bckndbool=True, ):#singleima
                     banom=h5mar['banom'][pointind, :, :]
                     data=bckndsubtract(data, bckndarr, killmap, btype=bcknd, banom_f_f=(banom, bminanomf[pointind, 0], bminanomf[pointind, 1]))[0]
             elif 'lin' in bcknd:
-                data=bckndsubtract(data, bckndarr, killmap, btype=bcknd, linweights=blinwts[pointind])[0]
+                data=bckndsubtract(data, constructbckndarr_linbyposn(bckndarr, pointind), killmap, btype=bcknd, linweights=blinwts[pointind])[0]
             else:
                 data=bckndsubtract(data, bckndarr, killmap, btype=bcknd)[0]
 
@@ -501,20 +517,20 @@ def buildintmap(chessh5grpstr, qgrid, bin=3):
         del h5grp[imapname]
     dset=h5grp.create_dataset(imapname, data=imap)
     dset.attrs['qgrid']=qgrid
+    if imapname+('bin%d' %bin) in h5grp:
+        del h5grp[imapname+('bin%d' %bin)]
     h5grp.create_dataset(imapname+('bin%d' %bin), data=binimage(imap, bin=bin, zerokill=True))
     h5chess.close()
 
 def buildchimap(chessh5grpstr, chigrid, bin=3):
     h5chess=CHESSRUNFILE()
     h5grp=h5chess[chessh5grpstr]
-
+    print '&'
     qimage=readh5pyarray(h5grp['qimage'])
     chiimage=readh5pyarray(h5grp['chiimage'])
-
     h5chess.close()
-
+    
     chimap=chimap_gen(qimage, chiimage, chigrid)
-
     chimapname=','.join(tuple([labelnumberformat(num) for num in chigrid]))
     h5chess=CHESSRUNFILE('r+')
     h5grp=h5chess[chessh5grpstr+'/chimap']
@@ -527,7 +543,7 @@ def buildchimap(chessh5grpstr, chigrid, bin=3):
     h5grp.create_dataset(chimapname+('bin%d' %bin), data=binimage(chimap, bin=bin, zerokill=True))
     h5chess.close()
 
-def calcqchiimages(chessh5grpstr, alsocalcbin=3):
+def calcqchiimages(chessh5grpstr, alsocalcbin=3, equate_chi_azim=False, custom2011strecth=False):
     bin=1
     if bin>1:
         alsocalcbin=None
@@ -551,7 +567,8 @@ def calcqchiimages(chessh5grpstr, alsocalcbin=3):
     h5chess.close()
 
     center=centerindeces_fit2dcenter(fit2dcenter, detsize=imageshape[0])
-    center, imageshape = tiltdirectionoperation(center, imageshape, tiltdir)
+    if not equate_chi_azim:
+        center, imageshape = tiltdirectionoperation(center, imageshape, tiltdir)
 
     center=numpy.uint16(numpy.round(numpy.float32(bincenterind_centerind(center, bin))))
     sizex=imageshape[0]//bin
@@ -563,7 +580,15 @@ def calcqchiimages(chessh5grpstr, alsocalcbin=3):
         leftisbig=False
         c=sizey-1-c #this effectively reverse direction of the bincenter if closer to LHS than RHS
     sizey=c+1 #this is the size of the qchidimage. the size of the expanded image will be 2*(c)+1
-    xvals=(numpy.float32(range(sizex))-center[0])*bin*psize
+    
+    if custom2011strecth:
+        xctr_pixrad=lambda p:-.009544*p+537.506
+        x=numpy.float32(range(sizex))
+        stretchcctr=xctr_pixrad(numpy.abs(x-center[0]))
+        print center[0], numpy.min(stretchcctr), numpy.max(stretchcctr)
+        xvals=(x-stretchcctr)*psize #does not work with non unity bin
+    else:
+        xvals=(numpy.float32(range(sizex))-center[0])*bin*psize
     yvals=numpy.float32(range(sizey))*bin*psize #these have units of mm (rho in x^ and y^ directions)
     rsq=(bin*psize*sizey)**2
 
@@ -573,13 +598,18 @@ def calcqchiimages(chessh5grpstr, alsocalcbin=3):
 
     qimage=qimage[:, :, 0]
     inds=numpy.where(qimage>0)
-    chiimage=numpy.zeros(qimage.shape, dtype='float32')
-    chiimage[inds]=chi_q_azim(qimage[inds], azimimage[inds], alpharad, L, wl)
-    print 'alpharad, L, wl', alpharad, L, wl
-    chipos=chiimage[chiimage>0]
-    print 'chiminmax', numpy.min(chipos), numpy.max(chipos)
-    dqchiimage=numpy.zeros(qimage.shape, dtype='float32')
-    dqchiimage[inds]=numpy.abs(dqchiperpixel(qimage[inds], chiimage[inds], azimimage[inds], alpharad, L, wl, binpsize=psize*bin))
+    if equate_chi_azim:
+        chiimage=numpy.zeros(qimage.shape, dtype='float32')
+        chiimage[inds]=azimimage[inds]
+        dqchiimage=numpy.ones(qimage.shape, dtype='float32')
+    else:
+        chiimage=numpy.zeros(qimage.shape, dtype='float32')
+        chiimage[inds]=chi_q_azim(qimage[inds], azimimage[inds], alpharad, L, wl)
+        print 'alpharad, L, wl', alpharad, L, wl
+        chipos=chiimage[chiimage>0]
+        print 'chiminmax', numpy.min(chipos), numpy.max(chipos)
+        dqchiimage=numpy.zeros(qimage.shape, dtype='float32')
+        dqchiimage[inds]=numpy.abs(dqchiperpixel(qimage[inds], chiimage[inds], azimimage[inds], alpharad, L, wl, binpsize=psize*bin))
 
     #used to not save azim. now save it as well as 2 others.
     twothetaimage=numpy.zeros(qimage.shape, dtype='float32')
@@ -598,7 +628,7 @@ def calcqchiimages(chessh5grpstr, alsocalcbin=3):
     h5grp=h5chess[chessh5grpstr]
     imls=[(qimage,'qimage'), (chiimage,'chiimage'), (dqchiimage,'dqchiimage'), (twothetaimage, 'twothetaimage'), (azimimage, 'azimimage'), (polfactimage, 'polfactimage'), (SiASFimage, 'SiASFimage')]
     for im, name in imls:
-        if name=='chiimage' and not leftisbig:
+        if name=='chiimage':# and not leftisbig:
             negatesmall=-1
         else:#else includes all other arrays
             negatesmall=1
@@ -609,8 +639,8 @@ def calcqchiimages(chessh5grpstr, alsocalcbin=3):
         fullsizeimage*=circkillmap
         if leftisbig:
             fullsizeimage=fullsizeimage[:,::-1] #CANNOT say fullsizeimage[:,:]= becuase hits creates a mirror
-
-        fullsizeimage=tiltdirectioninverseoperation(fullsizeimage, tiltdir)
+        if not equate_chi_azim:
+            fullsizeimage=tiltdirectioninverseoperation(fullsizeimage, tiltdir)
         if name+onlybinsavestr in h5grp:
             del h5grp[name+onlybinsavestr]
         dset=h5grp.create_dataset(name+onlybinsavestr, data=fullsizeimage)
@@ -641,6 +671,7 @@ def writenumtotxtfile(runpath,  xvals, yvals, savename,  header=None):
     fout.close()
 
 def writeplotso(runpath,  xvals, yvals, attrdict, xtype, savename):  #xvals and yvals must be same length numpy arrays, savename is filename without extension
+    yvals[yvals<0]=0.
     writestr=plotsoheader(attrdict, xtype)
     arg=numpy.argsort(xvals)
     xvals=xvals[arg]
@@ -673,7 +704,7 @@ def writeall2dimages(runpath, h5path,  h5groupstr,  type, typestr, colorrange=No
     if usebanom:
         bminanomf=h5mar['bminanomf']
     if type>0:
-        killmapbin=getkillmap(h5analysis.attrs['killmapstr'], bin=3)
+        killmapbin=getkillmap(h5analysis.attrs['killmapstr'], bin=getbin(h5analysis))
         if extrabin>1:
             killmapbin=binboolimage(killmapbin, bin=extrabin)
     if type==1 or type==3 or type==4:
@@ -685,7 +716,8 @@ def writeall2dimages(runpath, h5path,  h5groupstr,  type, typestr, colorrange=No
             bckndarr=readh5pyarray(h5mar['bavebin%d' %getbin(h5analysis)])
         if extrabin>1:
             if 'lin' in bcknd:
-                bckndarr=numpy.array([binimage(b, bin=extrabin) for b in bckndarr])
+                linbyposnhandler=lambda b: (len(b.shape)==3 and (numpy.array([binimage(arr, bin=extrabin) for arr in b]),) or (binimage(b, bin=extrabin),))[0]
+                bckndarr=tuple([linbyposnhandler(b) for b in bckndarr])
             else:
                 bckndarr=binimage(bckndarr, bin=extrabin)
     cb=None
@@ -695,7 +727,8 @@ def writeall2dimages(runpath, h5path,  h5groupstr,  type, typestr, colorrange=No
 
     if type==4:
         if 'lin' in bcknd:
-            bckndarr=numpy.array([b*killmapbin for b in bckndarr])
+            linbyposnhandler=lambda b: (len(b.shape)==3 and (numpy.array([arr*killmapbin for arr in b]),) or (b*killmapbin,))[0]
+            bckndarr=linbyposnhandler(bckndarr)
         else:
             bckndarr*=killmapbin
         savename1='_'.join((os.path.split(h5path)[1][0:-3], h5groupstr, bcknd[0:3]))
@@ -709,6 +742,9 @@ def writeall2dimages(runpath, h5path,  h5groupstr,  type, typestr, colorrange=No
         else:
             if 'lin' in bcknd:
                 for counter, b in enumerate(bckndarr):
+                    if len(b.shape)>2:
+                        print 'blin dataset is "by position" or some mode that is not supported for this plotting'
+                        continue
                     if not colorrange is None:
                         pyim=pylab.imshow(b, norm=norm)
                     else:
@@ -739,7 +775,7 @@ def writeall2dimages(runpath, h5path,  h5groupstr,  type, typestr, colorrange=No
                 if usebanom:
                     saveim=bckndsubtract(pnnn, bckndarr, killmapbin, btype=bcknd, banom_f_f=btuple)[0]
                 elif 'lin' in bcknd:
-                    saveim=bckndsubtract(pnnn, bckndarr, killmapbin, btype=bcknd, linweights=blinwts[pointind])[0]
+                    saveim=bckndsubtract(pnnn, constructbckndarr_linbyposn(bckndarr, pointind), killmapbin, btype=bcknd, linweights=blinwts[pointind])[0]
                 else:
                     saveim=bckndsubtract(pnnn, bckndarr, killmapbin, btype=bcknd)[0]
             elif type==2:
@@ -2055,7 +2091,7 @@ def buildnewscan(h5path, h5groupstr, newscandict):
                     h5sd.create_dataset(itemname, data=arr1)
     h5file.close()
 
-def initializescan(h5path, h5groupstr, bin=3):
+def initializescan(h5path, h5groupstr, bin=3, insituscalarname='IC3'):
     h5file=h5py.File(h5path, mode='r+')
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
     h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
@@ -2086,6 +2122,19 @@ def initializescan(h5path, h5groupstr, bin=3):
         initbcknd='min'
     else:
         initbcknd='ave'
+    if 'tseries 1' in attrdict['command'] and h5marcounts.shape[0]>1:# insitu experiment #TODO: what to do with acquisition_shape?
+        nimages=h5marcounts.shape[0]
+        g=h5file['/'.join((h5groupstr, 'measurement', 'scalar_data'))]
+        temp=[insituscalarname]
+        if insituscalarname!='Seconds':
+            temp+=['Seconds']
+        for nam in temp:
+            totic=g[nam]
+            ic=numpy.ones(nimages, dtype='float32')*totic/nimages
+            g.copy(nam, 'asimported_'+nam)
+            del g[nam]
+            g.create_dataset(nam, data=ic)
+
     print 'calculating ',  initbcknd, 'background - last step of data initialization'
     calcbcknd(h5path=h5path, h5groupstr=h5groupstr, bcknd=initbcknd, bin=bin)
     h5file.close()
@@ -2386,29 +2435,172 @@ def bckndsub1d_difffiles(h5path, h5groupstr, h5path_bcknd, h5groupstr_bcknd, spe
 #        h5mar.create_dataset('ibminnew', data=h5mar['ibmin'][:]-self.newadditionfrom1dbckndsubtraction[:])
     h5file.close()
 
-def linbckndsub1d(h5path, h5groupstr, bckndinvname0, bckndinvname1, fraczeroed=0.003, fprecision=0.001, scalarname='IC3', refineduringloop=True, maxtries=100, singlepointind=None):#no gui interface
+#def linbckndsub1d(h5path, h5groupstr, bckndinvname0, bckndinvname1, fraczeroed=0.003, fprecision=0.001, scalarname='IC3', refineduringloop=True, maxtries=100, singlepointind=None):#no gui interface
+# 
+#    #single image -> asintegratedicounts not saved and no attributes saved
+#    single=not (singlepointind is None)
+#    h5file=h5py.File(h5path, mode='r+')
+#    h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
+#    h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
+#    if 'asintegratedicounts' in h5mar:
+#        t=h5mar['asintegratedicounts'][:, :]
+#        if single:
+#            h5mar['icounts'][singlepointind, :]=t[singlepointind, :]
+#        else:
+#            h5mar['icounts'][:, :]=t
+#    h5file.close()
+#
+#    h5file=h5py.File(h5path, mode='r')
+#    h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
+#    h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
+#    attrdict=getattr(h5path, h5groupstr)
+#    if single:
+#        pointlist=[singlepointind]
+#    else:
+#        pointlist=h5analysis.attrs['pointlist']
+#    icounts=readh5pyarray(h5mar['icounts'])
+#    h5marcounts=h5file['/'.join((h5groupstr, 'measurement', getxrdname(h5analysis), 'counts'))]
+#    
+#    ic=h5file['/'.join((h5groupstr, 'measurement', 'scalar_data', scalarname))][:]
+#    if 'subexposures' in h5marcounts.attrs.keys():
+#        subex=h5marcounts.attrs['subexposures']
+#    else:
+#        subex=1
+#
+#    subex=numpy.float32(subex)
+#
+#    if len(subex.shape)==0:#setup for future possiblity of different subexposures
+#        subex=numpy.ones(icounts.shape[0], dtype='float32')*subex
+#
+#    if 'mod_multiplierarray' in h5marcounts.attrs.keys():
+#        m=h5marcounts.attrs['mod_multiplierarray']
+#        m[m==0.]=1.
+#        subex/=m
+#        ic/=m
+#        
+#    h5chess=CHESSRUNFILE()
+#    h5grp=h5chess[attrdict['chessrunstr']]
+#    bigrp=h5grp['BckndInventory']
+#    kms=attrdict['killmapstr'].rpartition('/')[2]
+#    ims=attrdict['imapstr'].rpartition('/')[2]
+#    if (ims in bigrp) and (kms in bigrp[ims]) and (bckndinvname0 in bigrp[ims][kms]) and (bckndinvname1 in bigrp[ims][kms]):
+#        pnt=bigrp[ims][kms][bckndinvname0]
+#        b0=readh5pyarray(pnt)
+#        if scalarname in pnt.attrs.keys():
+#            ic_b0=pnt.attrs[scalarname]
+#        else:
+#            ic_b0=1.
+#        if 'subexposures' in pnt.attrs.keys():
+#            subex_b0=pnt.attrs['subexposures']
+#        else:
+#            subex_b0=1.
+#        pnt=bigrp[ims][kms][bckndinvname1]
+#        b1=readh5pyarray(pnt)
+#        if scalarname in pnt.attrs.keys():
+#            ic_b1=pnt.attrs[scalarname]
+#        else:
+#            ic_b1=1.
+#        if 'subexposures' in pnt.attrs.keys():
+#            subex_b1=pnt.attrs['subexposures']
+#        else:
+#            subex_b1=1.
+#        h5chess.close()
+#        h5file.close()
+##        except:
+##            h5chess.close()
+##            h5file.close()
+##            print 'problem reading data from arrays - most likely cause is absence of attributes %s and %s' %(bckndinvname1, 'subexposures')
+##            return
+#
+#    else:
+#        h5chess.close()
+#        h5file.close()
+#        print 'aborting because bcknd arrays not found or not matched with imap and killmap'
+#        return
+#    
+#    
+#    
+#    b0cpy=copy.copy(b0)
+#    b1cpy=copy.copy(b1)
+#
+#    f0startlist=[]
+#    f1startlist=[]
+#    f0list=[]
+#    f1list=[]
+#    fraczlist=[]
+#    for pointind in pointlist:
+#        print pointind
+#        #print subex[pointind], ic[pointind], subex_b0, ic_b0, subex_b1, ic_b1
+#        f0, f1=f0_f1_exp_ic(subex[pointind], ic[pointind], subex_b0, ic_b0, subex_b1, ic_b1)
+#        #print f0, f1
+#        if isinstance(fprecision, list):
+#            for fp in fprecision[:-1]:
+#                blinclass=calc_blin_factors(icounts[pointind], b0, b1, f0=f0, f1=f1, fraczeroed=fraczeroed, factorprecision=fp, refineduringloop=refineduringloop, maxtries=maxtries)
+#                if blinclass.warning!='':
+#                    print 'pointind %d, with fp=%s : %s' %(pointind, `fp`, blinclass.warning)
+#                f0=blinclass.f0
+#                f1=blinclass.f1
+#            fp=fprecision[-1]
+#        else:
+#            fp=fprecision
+#        blinclass=calc_blin_factors(icounts[pointind], b0, b1, f0=f0, f1=f1, fraczeroed=fraczeroed, factorprecision=fp, refineduringloop=refineduringloop, maxtries=maxtries)
+#        if blinclass.warning!='':
+#            print 'pointind %d, with fp=%s : %s', (pointind, `fp`, blinclass.warning)
+#        f0list+=[blinclass.f0]
+#        f1list+=[blinclass.f1]
+#        fraczlist+=[blinclass.fracz]
+#
+#    f0=numpy.array(f0list)
+#    f1=numpy.array(f1list)
+#    fracz=numpy.array(fraczlist)
+#    bcknddata=-1.*numpy.dot(numpy.array([f0, f1]).T, numpy.array([b0cpy, b1cpy]))
+#
+#    h5file=h5py.File(h5path, mode='r+')
+#    h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
+#    h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
+#    
+#    if single:
+#        newicounts=numpy.array([ic+bc for ic, bc in zip(icounts[pointlist], bcknddata)], dtype=icounts.dtype)
+#        newicounts[newicounts<0.]=0.
+#        h5mar['icounts'][singlepointind, :]=newicounts[0]
+#    else:
+#        newicounts=numpy.zeros(icounts.shape, dtype=icounts.dtype)
+#        newicounts[pointlist]=numpy.array([ic+bc for ic, bc in zip(icounts[pointlist], bcknddata)], dtype=icounts.dtype)
+#        newicounts[newicounts<0.]=0.
+#        if 'asintegratedicounts' in h5mar:
+#            del h5mar['asintegratedicounts']
+#            print 'WARNING:There should not have been an existing icounts_asintegrated but it is being overwritten anyway'
+#        icountsasint=h5mar.create_dataset('asintegratedicounts', data=icounts)
+#    
+#        h5mar['icounts'][:, :]=newicounts[:, :]
+#    
+#        w=numpy.zeros((icounts.shape[0], 2), dtype=f0.dtype)
+#        w[pointlist, :]=numpy.array([f0, f1]).T
+#        asintattrs={'weights':w, 'b0':b0cpy, 'b1':b1cpy, 'bckndinvname0':bckndinvname0, 'bckndinvname1':bckndinvname1, 'f0startvals':f0startlist, 'f1startvals':f1startlist, 'fraczeroed':fraczeroed, 'fprecision':fprecision, 'refineduringloop':numpy.uint8(refineduringloop)}
+#
+#
+#        if 'ibckndadd' in h5mar:
+#            del h5mar['ibckndadd']
+#        h5mar.create_dataset('ibckndadd', data=numpy.array(bcknddata))
+#
+#    h5file.close()
+
+def linbckndsub1d(h5path, h5groupstr, fraczeroed=0.003, fprecision=0.001, scalarname='IC3', refineduringloop=True, maxtries=100):#no gui interface
     #***
     #single image -> asintegratedicounts not saved and no attributes saved
-    single=not (singlepointind is None)
     h5file=h5py.File(h5path, mode='r+')
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
     h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
     if 'asintegratedicounts' in h5mar:
         t=h5mar['asintegratedicounts'][:, :]
-        if single:
-            h5mar['icounts'][singlepointind, :]=t[singlepointind, :]
-        else:
-            h5mar['icounts'][:, :]=t
+        h5mar['icounts'][:, :]=t[:, :]
     h5file.close()
 
     h5file=h5py.File(h5path, mode='r')
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
     h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
     attrdict=getattr(h5path, h5groupstr)
-    if single:
-        pointlist=[singlepointind]
-    else:
-        pointlist=h5analysis.attrs['pointlist']
+    pointlist=h5analysis.attrs['pointlist']
     icounts=readh5pyarray(h5mar['icounts'])
     h5marcounts=h5file['/'.join((h5groupstr, 'measurement', getxrdname(h5analysis), 'counts'))]
     
@@ -2428,51 +2620,98 @@ def linbckndsub1d(h5path, h5groupstr, bckndinvname0, bckndinvname1, fraczeroed=0
         m[m==0.]=1.
         subex/=m
         ic/=m
-        
-    h5chess=CHESSRUNFILE()
-    h5grp=h5chess[attrdict['chessrunstr']]
-    bigrp=h5grp['BckndInventory']
+    
     kms=attrdict['killmapstr'].rpartition('/')[2]
     ims=attrdict['imapstr'].rpartition('/')[2]
-    if (ims in bigrp) and (kms in bigrp[ims]) and (bckndinvname0 in bigrp[ims][kms]) and (bckndinvname1 in bigrp[ims][kms]):
-        pnt=bigrp[ims][kms][bckndinvname0]
-        b0=readh5pyarray(pnt)
-        if scalarname in pnt.attrs.keys():
-            ic_b0=pnt.attrs[scalarname]
-        else:
-            ic_b0=1.
-        if 'subexposures' in pnt.attrs.keys():
-            subex_b0=pnt.attrs['subexposures']
-        else:
-            subex_b0=1.
-        pnt=bigrp[ims][kms][bckndinvname1]
-        b1=readh5pyarray(pnt)
-        if scalarname in pnt.attrs.keys():
-            ic_b1=pnt.attrs[scalarname]
-        else:
-            ic_b1=1.
-        if 'subexposures' in pnt.attrs.keys():
-            subex_b1=pnt.attrs['subexposures']
-        else:
-            subex_b1=1.
-        h5chess.close()
-        h5file.close()
-#        except:
-#            h5chess.close()
-#            h5file.close()
-#            print 'problem reading data from arrays - most likely cause is absence of attributes %s and %s' %(bckndinvname1, 'subexposures')
-#            return
-
+    
+    blin0_name=h5mar['blin0'].attrs['sourcename']
+    a, b, c=blin0_name.rpartition('/')
+    blin0_1dpath='/'.join((a, ims, kms, c))
+    blin0_inds=h5mar['blin0'].attrs['sourcearrayindex']
+    if isinstance(blin0_inds, int):
+        blin0_processtype=1
+    elif isinstance(blin0_inds, numpy.ndarray):
+        blin0_processtype=2
     else:
-        h5chess.close()
-        h5file.close()
-        print 'aborting because bcknd arrays not found or not matched with imap and killmap'
-        return
+        blin0_processtype=0
     
+    blin1_name=h5mar['blin1'].attrs['sourcename']
+    a, b, c=blin1_name.rpartition('/')
+    blin1_1dpath='/'.join((a, ims, kms, c))
+    blin1_inds=h5mar['blin1'].attrs['sourcearrayindex']
+    if isinstance(blin1_inds, int):
+        blin1_processtype=1
+    elif isinstance(blin1_inds, numpy.ndarray):
+        blin1_processtype=2
+    else:
+        blin1_processtype=0
+    h5file.close()
     
+    h5chess=CHESSRUNFILE()
+#    h5grp=h5chess[attrdict['chessrunstr']]
+#    bigrp=h5grp['BckndInventory']
+
+    pnt=h5chess[blin0_1dpath]
+    b0=readh5pyarray(pnt)
+    if scalarname in pnt.attrs.keys():
+        ic_b0=pnt.attrs[scalarname]
+    else:
+        ic_b0=1.
+    if 'subexposures' in pnt.attrs.keys():
+        subex_b0=pnt.attrs['subexposures']
+    else:
+        subex_b0=1.
+        
+    pnt=h5chess[blin1_1dpath]
+    b1=readh5pyarray(pnt)
+    if scalarname in pnt.attrs.keys():
+        ic_b1=pnt.attrs[scalarname]
+    else:
+        ic_b1=1.
+    if 'subexposures' in pnt.attrs.keys():
+        subex_b1=pnt.attrs['subexposures']
+    else:
+        subex_b1=1.
+    h5chess.close()
     
-    b0cpy=copy.copy(b0)
-    b1cpy=copy.copy(b1)
+    if blin0_processtype==1:
+        b0=b0[blin0_inds]
+        if isinstance(ic_b0, numpy.ndarray):
+            ic_b0=ic_b0[blin0_inds]
+        if isinstance(subex_b0,  numpy.ndarray):
+            subex_b0=subex_b0[blin0_inds]
+    if blin1_processtype==1:
+        b1=b1[blin1_inds]
+        if isinstance(ic_b1, numpy.ndarray):
+            ic_b1=ic_b1[blin1_inds]
+        if isinstance(subex_b1,  numpy.ndarray):
+            subex_b1=subex_b1[blin1_inds]
+    
+    if blin0_processtype==2:
+        if isinstance(ic_b0,  numpy.ndarray):
+            ic_b0arr=numpy.array([ic_b0[i] for i in blin1_inds])
+        else:
+            ic_b0arr=numpy.array([ic_b0]*len(blin1_inds))
+        if isinstance(subex_b0,  numpy.ndarray):
+            subex_b0arr=numpy.array([subex_b0[i] for i in blin1_inds])
+        else:
+            subex_b0arr=numpy.array([subex_b0]*len(blin1_inds))
+        b0arr=numpy.array([b0[i] for i in blin0_inds])
+    else:
+        b0cpy=copy.copy(b0)
+    
+    if blin1_processtype==2:
+        if isinstance(ic_b1,  numpy.ndarray):
+            ic_b1arr=numpy.array([ic_b1[i] for i in blin1_inds])
+        else:
+            ic_b1arr=numpy.array([ic_b1]*len(blin1_inds))
+        if isinstance(subex_b1,  numpy.ndarray):
+            subex_b1arr=numpy.array([subex_b1[i] for i in blin1_inds])
+        else:
+            subex_b1arr=numpy.array([subex_b1]*len(blin1_inds))
+        b1arr=numpy.array([b1[i] for i in blin1_inds])
+    else:
+        b1cpy=copy.copy(b1)
 
     f0startlist=[]
     f1startlist=[]
@@ -2480,9 +2719,22 @@ def linbckndsub1d(h5path, h5groupstr, bckndinvname0, bckndinvname1, fraczeroed=0
     f1list=[]
     fraczlist=[]
     for pointind in pointlist:
-        #print subex[pointind], ic[pointind], subex_b0, ic_b0, subex_b1, ic_b1
+        print pointind
+        
+        if blin0_processtype==2:
+            ic_b0=ic_b0arr[pointind]
+            subex_b0=subex_b0arr[pointind]
+            b0=b0arr[pointind]
+        
+        if blin1_processtype==2:
+            ic_b1=ic_b1arr[pointind]
+            subex_b1=subex_b1arr[pointind]
+            b1=b1arr[pointind]
+        
         f0, f1=f0_f1_exp_ic(subex[pointind], ic[pointind], subex_b0, ic_b0, subex_b1, ic_b1)
-        #print f0, f1
+        print f0, f1
+        f0startlist+=[f0]
+        f1startlist+=[f1]
         if isinstance(fprecision, list):
             for fp in fprecision[:-1]:
                 blinclass=calc_blin_factors(icounts[pointind], b0, b1, f0=f0, f1=f1, fraczeroed=fraczeroed, factorprecision=fp, refineduringloop=refineduringloop, maxtries=maxtries)
@@ -2490,12 +2742,14 @@ def linbckndsub1d(h5path, h5groupstr, bckndinvname0, bckndinvname1, fraczeroed=0
                     print 'pointind %d, with fp=%s : %s' %(pointind, `fp`, blinclass.warning)
                 f0=blinclass.f0
                 f1=blinclass.f1
+                print 'after fp=%.4f, f0=%.4f,  f1=%.4f' %(fp, f0, f1)
             fp=fprecision[-1]
         else:
             fp=fprecision
         blinclass=calc_blin_factors(icounts[pointind], b0, b1, f0=f0, f1=f1, fraczeroed=fraczeroed, factorprecision=fp, refineduringloop=refineduringloop, maxtries=maxtries)
         if blinclass.warning!='':
             print 'pointind %d, with fp=%s : %s', (pointind, `fp`, blinclass.warning)
+        print 'after fp=%.4f, f0=%.4f,  f1=%.4f' %(fp, blinclass.f0, blinclass.f1)
         f0list+=[blinclass.f0]
         f1list+=[blinclass.f1]
         fraczlist+=[blinclass.fracz]
@@ -2503,41 +2757,52 @@ def linbckndsub1d(h5path, h5groupstr, bckndinvname0, bckndinvname1, fraczeroed=0
     f0=numpy.array(f0list)
     f1=numpy.array(f1list)
     fracz=numpy.array(fraczlist)
-    bcknddata=-1.*numpy.dot(numpy.array([f0, f1]).T, numpy.array([b0cpy, b1cpy]))
+    
+    if blin0_processtype==2:
+        bcknddata=-1.*numpy.array([f0v*b0arr[pointind] for pointind, f0v in zip(pointlist, f0)])
+    else:
+        bcknddata=-1.*numpy.array([f0v*b0cpy for f0v in f0])
+    if blin1_processtype==2:
+        bcknddata+=-1.*numpy.array([f1v*b1arr[pointind] for pointind, f1v in zip(pointlist, f1)])
+    else:
+        bcknddata+=-1.*numpy.array([f1v*b1cpy for f1v in f1])
+    
+    #bcknddata=-1.*numpy.dot(numpy.array([f0, f1]).T, numpy.array([b0cpy, b1cpy]))
 
     h5file=h5py.File(h5path, mode='r+')
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
     h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
     
-    if single:
-        newicounts=numpy.array([ic+bc for ic, bc in zip(icounts[pointlist], bcknddata)], dtype=icounts.dtype)
-        newicounts[newicounts<0.]=0.
-        h5mar['icounts'][singlepointind, :]=newicounts[0]
-    else:
-        newicounts=numpy.zeros(icounts.shape, dtype=icounts.dtype)
-        newicounts[pointlist]=numpy.array([ic+bc for ic, bc in zip(icounts[pointlist], bcknddata)], dtype=icounts.dtype)
-        newicounts[newicounts<0.]=0.
-        if 'asintegratedicounts' in h5mar:
-            del h5mar['asintegratedicounts']
-            print 'WARNING:There should not have been an existing icounts_asintegrated but it is being overwritten anyway'
-        icountsasint=h5mar.create_dataset('asintegratedicounts', data=icounts)
-    
-        h5mar['icounts'][:, :]=newicounts[:, :]
-    
-        w=numpy.zeros((icounts.shape[0], 2), dtype=f0.dtype)
-        w[pointlist, :]=numpy.array([f0, f1]).T
-        asintattrs={'weights':w, 'b0':b0cpy, 'b1':b1cpy, 'bckndinvname0':bckndinvname0, 'bckndinvname1':bckndinvname1, 'f0startvals':f0startlist, 'f1startvals':f1startlist, 'fraczeroed':fraczeroed, 'fprecision':fprecision, 'refineduringloop':numpy.uint8(refineduringloop)}
+
+    newicounts=numpy.zeros(icounts.shape, dtype=icounts.dtype)
+    newicounts[pointlist]=numpy.array([ic+bc for ic, bc in zip(icounts[pointlist], bcknddata)], dtype=icounts.dtype)
+    newicounts[newicounts<0.]=0.
+    if 'asintegratedicounts' in h5mar:
+        del h5mar['asintegratedicounts']
+        print 'WARNING:There should not have been an existing icounts_asintegrated but it is being overwritten anyway'
+    icountsasint=h5mar.create_dataset('asintegratedicounts', data=icounts)
+
+    h5mar['icounts'][:, :]=newicounts[:, :]
+
+    w=numpy.zeros((icounts.shape[0], 2), dtype=f0.dtype)
+    w[pointlist, :]=numpy.array([f0, f1]).T
+    saveattrs={'weights':w, 'blin0_h5chesspath':blin0_1dpath, 'blin1_h5chess':blin1_1dpath, 'f0startvals':f0startlist, 'f1startvals':f1startlist, 'fraczeroed':fraczeroed, 'fprecision':fprecision, 'refineduringloop':numpy.uint8(refineduringloop)}
 
 
-        if 'ibckndadd' in h5mar:
-            del h5mar['ibckndadd']
-        h5mar.create_dataset('ibckndadd', data=numpy.array(bcknddata))
-
+    if 'ibckndadd' in h5mar:
+        del h5mar['ibckndadd']
+    ds=h5mar.create_dataset('ibckndadd', data=numpy.array(bcknddata))
+    for k, v in saveattrs.iteritems():
+        ds.attrs[k]=v
     h5file.close()
 
-#ACTIVEPATH='C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12/h5analysis/Xiaodong/Xiaodong_080303ATiAuCu.dat.h5'
-#ACTIVEGRP='14cells'
-#linbckndsub1d(ACTIVEPATH, ACTIVEGRP, 'Dark_24imave','NoSample_NoPb_480s', fprecision=[0.01, 0.005, 0.0005, 0.00005], maxtries=2000, singlepointind=10)
+#ACTIVEPATH='F:/CHESS2011_h5MAIN/2011Jun01a.h5'
+#ACTIVEGRP='13'
+#linbckndsub1d(ACTIVEPATH, ACTIVEGRP, fprecision=[.01, .0005], maxtries=2000)#, singlepointind=2)
+
+#ACTIVEPATH='C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12/h5analysis/AuSiCupnsc_assembledh5_1dnosample/AuSiCu_pnsc_notheated.dat.h5'
+#ACTIVEGRP='7'
+#linbckndsub1d(ACTIVEPATH, ACTIVEGRP, 'Dark_24imave','NoSample_NoPb_480s', fprecision=[.0005], maxtries=2000)#, singlepointind=2)
 #print 'done'
 #linbckndsub1d('F:/CHESS_2010DEC/AgRapid/Ag_rapidExpopens130ms_6dec_24imsum.h5', '24of130ms', 'Dark_24imave','NoSample_NoPb_10s', fprecision=0.00003, maxtries=1000)
 
@@ -2589,6 +2854,42 @@ def integratebckndinvimage(h5path=None, h5groupstr=None, kill_i_dqchi_mapstr=Non
         print 'created ', ds.name
     h5chess.close()
 
+def integrateallbckndinvimages(chessrun, imapname, killmapname):#no gui interface***
+    imap, qgrid=getimapqgrid('/'.join([chessrun, 'imap', imapname]))
+    slots=numpy.uint16(qgrid[2])
+    killmap=getkillmap('/'.join([chessrun, 'killmap', killmapname]))
+    dqchiimage=getdqchiimage('/'.join([chessrun, 'dqchiimage']))
+    normalizer=integrationnormalization(killmap, imap, dqchiimage, slots)
+    imap*=killmap
+
+    h5chess=CHESSRUNFILE(mode='r+')
+    h5grp=h5chess[chessrun]
+    bigrp=h5grp['BckndInventory']
+    if imapname in bigrp:
+        savegrp=bigrp[imapname]
+    else:
+        savegrp=bigrp.create_group(imapname)
+    if killmapname in savegrp:
+        savegrp=savegrp[killmapname]
+    else:
+        savegrp=savegrp.create_group(killmapname)
+    blist=[pnt.name.rpartition('/')[2] for pnt in bigrp.itervalues() if isinstance(pnt, h5py.Dataset)]
+
+    for bn in blist:
+        print bn
+        b=readh5pyarray(bigrp[bn])
+        if b.ndim==3:
+            b1d=numpy.array([normalizer*intbyarray(arr, imap, dqchiimage, slots) for arr in b])
+        else:
+            b1d=normalizer*intbyarray(b, imap, dqchiimage, slots)
+        if bn in savegrp:
+            del savegrp[bn]
+        ds=savegrp.create_dataset(bn, data=b1d)
+        for k, v in bigrp[bn].attrs.iteritems():
+            ds.attrs[k]=v
+        print 'created ', ds.name
+    h5chess.close()
+    
 #integratebckndinvimage(h5path='C:/Users/JohnnyG/Documents/CHESS/CHESS2010-12/calibrants/BckndXRD_3060/NoSample_30.dat.h5', h5groupstr='4')
 #print 'done'
     
@@ -2827,3 +3128,44 @@ def integratebckndinvimage(h5path=None, h5groupstr=None, kill_i_dqchi_mapstr=Non
 ##print 'done'
 ##
 #
+
+
+def darksubtract2dimages(h5path, h5groupstr, bckdninvname):#no GUI 
+    h5file=h5py.File(h5path, mode='r+')
+    h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
+    h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
+    h5marcounts=h5file['/'.join((h5groupstr,'measurement', getxrdname(h5analysis), 'counts'))]
+    pointlist=h5analysis.attrs['pointlist']
+#    except:
+#        h5marcounts=h5file['/'.join((h5groupstr,'measurement', 'area_detector', 'counts'))]
+#        pointlist=range(h5marcounts.shape[0])
+    #h5marcounts.parent.copy('counts', 'initcounts')
+    
+    h5chess=CHESSRUNFILE()
+    h5grp=h5chess[h5analysis.attrs['chessrunstr']]
+    bipnt=h5grp['BckndInventory'][bckdninvname]
+    b0=readh5pyarray(bipnt)
+    subex_b0=bipnt.attrs['subexposures']
+    h5chess.close()
+    b0=numpy.float32(b0)
+    if 'mod_multiplierarray' in h5marcounts.attrs:
+        multarr=h5marcounts.attrs['mod_multiplierarray']
+    else:
+        multarr=numpy.ones(h5marcounts.shape[0], dtype='float32')
+    multarr*=h5marcounts.attrs['subexposures']*1./subex_b0
+    h5marcounts.attrs['DarkSub_BckndInv']=bckdninvname
+    h5marcounts.attrs['DarkSub_multarr']=multarr
+    for pointind in pointlist:
+        data=h5marcounts[pointind, :, :]
+        data=numpy.float32(data)-b0*multarr[pointind]
+        print (data<0.).sum(), ' pixels being zeroed in 2-d dark subtraction on image ', pointind
+        data[data<0.]=0.
+        data=numpy.array(data, dtype=h5marcounts.dtype)
+        h5marcounts[pointind, :, :]=data
+    h5file.close()
+
+#p='E:/CHESS_2010DEC/Cornell_h5analysis/Anna_20100609XPdAu.dat.h5'
+#g='3'
+#darksubtract2dimages(p, g, 'Dark_24imave')
+
+#integrateallbckndinvimages('2011', '8,0.1,630', 'killmap1')

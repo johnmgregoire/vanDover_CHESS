@@ -159,7 +159,7 @@ def interp(func, y, xcrit, maxtries=20):
     if tryans!=tryans.sort:
         trylist.sort
     #print 'in interp', xcrit, tryans, trylist
-    ycrit=scipy.interpolate.UnivariateSpline(tryans, trylist)(xcrit)[0]
+    ycrit=scipy.interpolate.spline(tryans, trylist, xcrit)
     if numpy.isnan(ycrit):
         print 'interp problem'
         return None
@@ -174,7 +174,10 @@ def qq_gen(innn): #innn should be array of intensity values dtype='float32'
 def intbyarray(data, imap, dqchiimage, slots=None):   #data must be a square array, optionally dtype='uint16', map is same size as data with each pixel value v, v=0->ignored, else included in integration bin v-1
     if slots is None:
         slots=imap.max()
-    data=numpy.float32(numpy.abs(dqchiimage)*data)
+    if dqchiimage is None:
+        data=numpy.float32(data)
+    else:
+        data=numpy.float32(numpy.abs(dqchiimage)*data)
     ans=numpy.array([(data[imap==i]).sum() for i in xrange(1, slots+1, 1)])
     ans[numpy.where(numpy.isnan(ans))]=0.0
     return ans
@@ -182,7 +185,10 @@ def intbyarray(data, imap, dqchiimage, slots=None):   #data must be a square arr
 def integrationnormalization(killmap, imap, dqchiimage, slots=None):#this pretty much is the reciprocal of the integration of killmap so that haveing a small number of pixels in certain q-range doesn't affect magnitude of icounts
     if slots is None:
         slots=imap.max()
-    data=numpy.float32(numpy.abs(dqchiimage)*killmap)
+    if dqchiimage is None:
+        data=numpy.float32(killmap)
+    else:
+        data=numpy.float32(numpy.abs(dqchiimage)*killmap)
     ans=numpy.array([(data[imap==i]).sum() for i in xrange(1, slots+1, 1)])
     ans[numpy.where(numpy.isnan(ans))]=0.0
     ans[ans<0]=0.0#shouldn't be necessary
@@ -247,7 +253,7 @@ def unbinboolimage(data, bin=3):
     return numpy.array([(numpy.array([a+i for i in data[j//bin]])).flatten() for j in range(bin*data.shape[0])])
 
 def combineimageswithwieghts(wts, imagearr):# it would be nice to use numpy.dot but that doesn't work with a 3-d array
-    return numpy.array([w*im for w, im in zip(wts, imagearr)], dtype=imagearr.dtype).sum(axis=0)
+    return numpy.array([w*im for w, im in zip(wts, imagearr)], dtype=imagearr[0].dtype).sum(axis=0)
 def bckndsubtract(data, bckndarr, killmap=None, btype='minanom', banom_f_f=None,  banomcalc=None, linweights=None):
 #data,bckndarr,killmap must be same size. banom will be adjusted to that size
 #if btype is 'min' or 'ave' just calculates and returns - killmap can be None for this but must be passed otherwise
@@ -385,7 +391,8 @@ class calc_bmin_banom_factors():
 
         bqmin=numpy.array([self.bqmin_gen(i+1) for i in range(self.bqgrid[2])])
         #print '**', bqmin
-        self.banom_int=scipy.interpolate.UnivariateSpline(pixvalssq, bqmin)
+        #self.banom_int=scipy.interpolate.UnivariateSpline(pixvalssq, bqmin)
+        self.banom_int=lambda xeval: scipy.interpolate.spline(pixvalssq, bqmin, xeval)
         self.banom=self.banom_gen()
         nanlist=numpy.isnan(self.banom)
         if nanlist.sum()>0:
@@ -576,14 +583,22 @@ def AveArrUpToRank(arr, rank=0.5):
     return arr[:int(round(rank*len(arr)))].mean(dtype='float32')
     
 def FindLinearSumBcknd(counts, killmap, b0, b1, f0vals, f1vals, fraczeroed=0.05, rankfornorm=0.5, fprecision=0.01):#takes the n x image counts and kill and bcknd images and using the f0vals,f1vals as guesses for the weights of the normalized bcknd images, find the f0,f1 that sum to maximum total counts while staying below fraczeroed  pixels being zeroed
-    vol0=(b0*killmap).sum(dtype='float32')
-    vol1=(b1*killmap).sum(dtype='float32')
     b0=numpy.float32(b0)
-    b0wt=AveArrUpToRank(b0[numpy.where(killmap)], rank=rankfornorm)
-    b0/=b0wt
+    b0ptbyptbool=(b0.ndim==3)
+    if b0ptbyptbool:
+        b0wt=[AveArrUpToRank(b0v[numpy.where(killmap)], rank=rankfornorm) for b0v in b0]
+        b0l=[b0v/b0wtv for b0v, b0wtv in zip(b0, b0wt)]
+    else:
+        b0wt=AveArrUpToRank(b0[numpy.where(killmap)], rank=rankfornorm)
+        b0/=b0wt
     b1=numpy.float32(b1)
-    b1wt=AveArrUpToRank(b1[numpy.where(killmap)], rank=rankfornorm)
-    b1/=b1wt
+    b1ptbyptbool=(b1.ndim==3)
+    if b1ptbyptbool:
+        b1wt=[AveArrUpToRank(b1v[numpy.where(killmap)], rank=rankfornorm) for b1v in b1]
+        b1l=[b1v/b1wtv for b1v, b1wtv in zip(b1, b1wt)]
+    else:
+        b1wt=AveArrUpToRank(b1[numpy.where(killmap)], rank=rankfornorm)
+        b1/=b1wt
     nz=(killmap==1).sum(dtype='float32')*fraczeroed
     print 'nz: ', nz,  '   trials: ', len(f0vals)*len(f1vals)
     print 'The trial values are \nf0:', f0vals, '\nf1:', f1vals
@@ -591,6 +606,18 @@ def FindLinearSumBcknd(counts, killmap, b0, b1, f0vals, f1vals, fraczeroed=0.05,
     f1final=[]
     for counter, c in enumerate(counts):
         print 'Starting image ', counter
+        if b0ptbyptbool:
+            b0=b0l[counter]
+            b0wtv=b0wt[counter]
+        else:
+            b0wtv=b0wt
+        if b1ptbyptbool:
+            b1=b1l[counter]
+            b1wtv=b1wt[counter]
+        else:
+            b1wtv=b1wt
+        vol0=(b0*killmap).sum(dtype='float32')
+        vol1=(b1*killmap).sum(dtype='float32')
         c=numpy.float32(c)
         cwt=AveArrUpToRank(c[killmap], rank=rankfornorm)
         c/=cwt
@@ -619,10 +646,10 @@ def FindLinearSumBcknd(counts, killmap, b0, b1, f0vals, f1vals, fraczeroed=0.05,
         print 'f1mod', f1mod
         f0mod=numpy.float32(f0mod)
         f1mod=numpy.float32(f1mod)
-        print 'tot vol', vol0*f0mod/b0wt+vol1*f1mod/b1wt
-        i=numpy.argmax(vol0*f0mod/b0wt+vol1*f1mod/b1wt) #vol0 and vol1 were calcuated before the biwt scaling so the wieghts have to be used here
-        f0final+=[f0mod[i]*cwt/b0wt]
-        f1final+=[f1mod[i]*cwt/b1wt]
+        print 'tot vol', vol0*f0mod/b0wtv+vol1*f1mod/b1wtv
+        i=numpy.argmax(vol0*f0mod/b0wtv+vol1*f1mod/b1wtv) #vol0 and vol1 were calcuated before the biwt scaling so the wieghts have to be used here
+        f0final+=[f0mod[i]*cwt/b0wtv]
+        f1final+=[f1mod[i]*cwt/b1wtv]
     return numpy.float32(f0final), numpy.float32(f1final)
     
     
@@ -664,7 +691,7 @@ class fitfcns:
             datatuple=datatuple[0:i]+tuple([numpy.float64(arr)])+datatuple[i+1:]
             i=i+1
         while self.performfit:
-            fitout = scipy.optimize.leastsq(resdic[len(datatuple)-1],self.initparams, args=datatuple, maxfev=self.maxfev, full_output=1, warning=False)
+            fitout = scipy.optimize.leastsq(resdic[len(datatuple)-1],self.initparams, args=datatuple, maxfev=self.maxfev, full_output=1)#, warning=False)
             self.performfit=False
 
             if fitout[4]!=1:
@@ -823,7 +850,8 @@ def bckndmincurve(allqvals, allivals, delq=None,  maxcurv=16.2, derivatepoints=5
                     interpnewb=numpy.multiply.outer(newb,numpy.array(range(dindex,0,-1))/(1.0*dindex)).flatten()[:1-dindex]+numpy.append(numpy.multiply.outer(newb[1:],numpy.array(range(dindex))/(1.0*dindex)).flatten(),0)
                     ivalscompare=allivals[ind_1*dindex:ind_1*dindex+interpnewb.size]
                     if (ivalscompare<interpnewb).sum()>0:
-                        redfrac=(1.0-numpy.max((interpnewb-ivalscompare)/interpbwinsub))
+                        itemp=numpy.where(interpbwinsub>0)
+                        redfrac=(1.0-numpy.max((interpnewb[itemp]-ivalscompare[itemp])/interpbwinsub[itemp]))
                 else:
                     if (ivals[ind_1:ind1]<(bvals[ind_1:ind1]+winsub)).sum()>0:
                         redfrac=(1.0-numpy.max(((bvals[ind_1:ind1]+winsub)-ivals[ind_1:ind1])/winsub))
@@ -839,8 +867,12 @@ def bckndmincurve(allqvals, allivals, delq=None,  maxcurv=16.2, derivatepoints=5
         qvals[-1]=allqvals[-1]
         bvals[-1]=allivals[-1]
     if allqvals.size!=qvals.size:
-        binterpolator=scipy.interpolate.UnivariateSpline(qvals, bvals)
-        bvals=binterpolator(allqvals)
+        if numpy.any(bvals)!=0.:
+#            binterpolator=scipy.interpolate.UnivariateSpline(qvals, bvals)
+#            bvals=binterpolator(allqvals)
+            bvals=scipy.interpolate.spline(qvals, bvals, allqvals)
+        else:
+            bvals=allqvals*0.
     return bvals
 
 
@@ -1939,8 +1971,9 @@ def fillgapswithinterp(allindslist, partindslist, partvals, indexinterval_fitind
         if splineorder==0:#only one data point to use. can't be no data points to use becuase thie hole has an edge
             fillvals=numpy.float32([fitvals[0]]*len(indstofill))
         else:
-            interpfcn=scipy.interpolate.UnivariateSpline(fitinds,fitvals,k=splineorder)
-            fillvals=numpy.float32(interpfcn(indstofill))
+#            interpfcn=scipy.interpolate.UnivariateSpline(fitinds,fitvals,k=splineorder)
+#            fillvals=numpy.float32(interpfcn(indstofill))
+            fillvals=scipy.interpolate.spline(fitinds,fitvals,indstofill, k=splineorder)
         fullvals[numpy.uint16(numpy.round(indstofill))]=fillvals[:]
     return fullvals
 
@@ -2112,6 +2145,7 @@ class calc_blin_factors():#can be used for 1-d or 2-d data if for 2-d you collap
         
         self.gain=interp(self.fracz_gain, numpy.array([.1, .3, 0.8, 0.9, 1.0, 1.1, 1.2, 2., 5., 10.]), self.fz, maxtries=maxtries)
         self.gaincheck()
+        self.gainrefine()
         self.f0*=self.gain
         self.f1*=self.gain
         fznow=self.fracz_f0f1(self.f0, self.f1)

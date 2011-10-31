@@ -202,6 +202,7 @@ p, li { white-space: pre-wrap; }
     <addaction name="action_synthimport"/>
     <addaction name="action_import_txt_XRD_data"/>
     <addaction name="action_copy_lin_bcknd"/>
+    <addaction name="action_batch_initialize"/>
    </widget>
    <widget class="QMenu" name="menuData_Analysis">
     <property name="title">
@@ -697,6 +698,11 @@ p, li { white-space: pre-wrap; }
   <action name="actionLinBcknd1d">
    <property name="text">
     <string>Linear Bcknd process 1d data</string>
+   </property>
+  </action>
+  <action name="action_batch_initialize">
+   <property name="text">
+    <string>batch initialize scans in same .h5</string>
    </property>
   </action>
  </widget>

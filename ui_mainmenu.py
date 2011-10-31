@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'C:\Users\JohnnyG\Documents\CHESS\XRDproject_Python\mainmenu.ui'
 #
-# Created: Fri Jan 14 01:04:56 2011
+# Created: Sun Oct 30 22:45:28 2011
 #      by: PyQt4 UI code generator 4.5.4
 #
 # WARNING! All changes made in this file will be lost!
@@ -230,6 +230,10 @@ class Ui_MainMenu(object):
         self.action_edit_raw_diff_data.setObjectName("action_edit_raw_diff_data")
         self.action_copy_lin_bcknd = QtGui.QAction(MainMenu)
         self.action_copy_lin_bcknd.setObjectName("action_copy_lin_bcknd")
+        self.actionLinBcknd1d = QtGui.QAction(MainMenu)
+        self.actionLinBcknd1d.setObjectName("actionLinBcknd1d")
+        self.action_batch_initialize = QtGui.QAction(MainMenu)
+        self.action_batch_initialize.setObjectName("action_batch_initialize")
         self.menuXRD_analysis_for_MAR345.addAction(self.action_initialize_scan)
         self.menuXRD_analysis_for_MAR345.addAction(self.action_edit_DAQ_params)
         self.menuXRD_analysis_for_MAR345.addAction(self.action_change_active_scan)
@@ -239,6 +243,7 @@ class Ui_MainMenu(object):
         self.menuXRD_analysis_for_MAR345.addAction(self.action_synthimport)
         self.menuXRD_analysis_for_MAR345.addAction(self.action_import_txt_XRD_data)
         self.menuXRD_analysis_for_MAR345.addAction(self.action_copy_lin_bcknd)
+        self.menuXRD_analysis_for_MAR345.addAction(self.action_batch_initialize)
         self.menuPerform_integration.addAction(self.action_integrate_single_image)
         self.menuPerform_integration.addAction(self.action_integrate_entire_dataset)
         self.menu1d_peak_search.addAction(self.action_1d_peak_search_single)
@@ -247,6 +252,7 @@ class Ui_MainMenu(object):
         self.menuData_Analysis.addAction(self.action_choose_data_subset)
         self.menuData_Analysis.addAction(self.action_calc_bcknd)
         self.menuData_Analysis.addAction(self.menuPerform_integration.menuAction())
+        self.menuData_Analysis.addAction(self.actionLinBcknd1d)
         self.menuData_Analysis.addAction(self.action_process_1d)
         self.menuData_Analysis.addAction(self.action_wavetrans1d)
         self.menuData_Analysis.addAction(self.menu1d_peak_search.menuAction())
@@ -420,4 +426,6 @@ class Ui_MainMenu(object):
         self.action_bckndinventory.setText(QtGui.QApplication.translate("MainMenu", "inventory a bcknd image from sample .h5", None, QtGui.QApplication.UnicodeUTF8))
         self.action_edit_raw_diff_data.setText(QtGui.QApplication.translate("MainMenu", "edit raw diffraction data", None, QtGui.QApplication.UnicodeUTF8))
         self.action_copy_lin_bcknd.setText(QtGui.QApplication.translate("MainMenu", "copy \"linear bcknd\" source data from other .h5", None, QtGui.QApplication.UnicodeUTF8))
+        self.actionLinBcknd1d.setText(QtGui.QApplication.translate("MainMenu", "Linear Bcknd process 1d data", None, QtGui.QApplication.UnicodeUTF8))
+        self.action_batch_initialize.setText(QtGui.QApplication.translate("MainMenu", "batch initialize scans in same .h5", None, QtGui.QApplication.UnicodeUTF8))
 

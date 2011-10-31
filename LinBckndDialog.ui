@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>735</width>
-    <height>266</height>
+    <height>275</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -195,6 +195,19 @@
    </property>
    <property name="text">
     <string>fraction of pixels to be zeroed:</string>
+   </property>
+  </widget>
+  <widget class="QCheckBox" name="propogateCheckBox">
+   <property name="geometry">
+    <rect>
+     <x>390</x>
+     <y>245</y>
+     <width>276</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Propogate to all groups in .h5</string>
    </property>
   </widget>
  </widget>

@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'C:\Users\JohnnyG\Documents\CHESS\XRDproject_Python\LinBckndDialog.ui'
 #
-# Created: Sun Jan 09 18:39:36 2011
+# Created: Mon Oct 31 09:38:54 2011
 #      by: PyQt4 UI code generator 4.5.4
 #
 # WARNING! All changes made in this file will be lost!
@@ -12,7 +12,7 @@ from PyQt4 import QtCore, QtGui
 class Ui_LinBckndDialog(object):
     def setupUi(self, LinBckndDialog):
         LinBckndDialog.setObjectName("LinBckndDialog")
-        LinBckndDialog.resize(735, 266)
+        LinBckndDialog.resize(735, 275)
         self.buttonBox = QtGui.QDialogButtonBox(LinBckndDialog)
         self.buttonBox.setGeometry(QtCore.QRect(520, 210, 191, 32))
         self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
@@ -63,6 +63,9 @@ class Ui_LinBckndDialog(object):
         self.label_5 = QtGui.QLabel(LinBckndDialog)
         self.label_5.setGeometry(QtCore.QRect(80, 220, 206, 17))
         self.label_5.setObjectName("label_5")
+        self.propogateCheckBox = QtGui.QCheckBox(LinBckndDialog)
+        self.propogateCheckBox.setGeometry(QtCore.QRect(390, 245, 276, 22))
+        self.propogateCheckBox.setObjectName("propogateCheckBox")
 
         self.retranslateUi(LinBckndDialog)
         QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), LinBckndDialog.accept)
@@ -78,4 +81,5 @@ class Ui_LinBckndDialog(object):
         self.imagefracLineEdit1.setText(QtGui.QApplication.translate("LinBckndDialog", "0.00001, 0.1, 0.4, 0.6, 0.75, 0.88, 0.96, 1.05, 1.2, 1.8", None, QtGui.QApplication.UnicodeUTF8))
         self.label_4.setText(QtGui.QApplication.translate("LinBckndDialog", "precision for final background weights:", None, QtGui.QApplication.UnicodeUTF8))
         self.label_5.setText(QtGui.QApplication.translate("LinBckndDialog", "fraction of pixels to be zeroed:", None, QtGui.QApplication.UnicodeUTF8))
+        self.propogateCheckBox.setText(QtGui.QApplication.translate("LinBckndDialog", "Propogate to all groups in .h5", None, QtGui.QApplication.UnicodeUTF8))
 
