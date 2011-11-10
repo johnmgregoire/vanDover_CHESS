@@ -15,7 +15,6 @@ import os
 import time
 import h5py
 import operator
-import PyMca.Elements as PyMEl
 #import Elemental
 #class atabclass(tables.IsDescription):
 #    qqpkind = tables.UInt16Col() #indeces of qqpktab
@@ -330,7 +329,7 @@ def calcbcknd(h5path, h5groupstr, bcknd, bin=3, critfrac=0.05, weightprecision=0
             calcbanom(h5path, h5groupstr, bqgrid=None, bin=bin)
 
 
-def integrate(h5path, h5groupstr, singleimage=None, bckndbool=True, normbydqchiimage=False):#singleimage is a string that is an index of marcounts or a string for other dataset or 'banom#'. only marcounts can get backnd subtraction
+def integrate(h5path, h5groupstr, singleimage=None, bckndbool=True, normbydqchiimage=False, data=None):#singleimage is a string that is an index of marcounts or a string for other dataset or 'banom#'. only marcounts can get backnd subtraction. if data is passed, it will be integrated and saved as 'i"+singleimage
     performed=True
     h5file=h5py.File(h5path, mode='r')
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
@@ -368,19 +367,18 @@ def integrate(h5path, h5groupstr, singleimage=None, bckndbool=True, normbydqchii
     h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
     h5mar=h5file['/'.join((h5groupstr, 'analysis', getxrdname(h5analysis)))]
     h5marcounts=h5file['/'.join((h5groupstr,'measurement', getxrdname(h5analysis), 'counts'))]
-
-    data=None
-    if singleimage is not None:
-        if singleimage.isdigit():
-            pointlist=[eval(singleimage)]
-        elif singleimage.startswith('banom'):
-            data=h5mar['banom'][eval(singleimage[5:]), :, :]
-        elif singleimage.startswith('raw'):
-            data=h5marcounts[eval(singleimage[3:]), :, :]
+    if not data is None:
+        if singleimage is not None:
+            if singleimage.isdigit():
+                pointlist=[eval(singleimage)]
+            elif singleimage.startswith('banom'):
+                data=h5mar['banom'][eval(singleimage[5:]), :, :]
+            elif singleimage.startswith('raw'):
+                data=h5marcounts[eval(singleimage[3:]), :, :]
+            else:
+                data=readh5pyarray(h5mar[singleimage])
         else:
-            data=readh5pyarray(h5mar[singleimage])
-    else:
-        pointlist=h5analysis.attrs['pointlist']
+            pointlist=h5analysis.attrs['pointlist']
 
     if not (data is None):
         if data.shape[0]<imap.shape[0]:
@@ -759,9 +757,12 @@ def writeall2dimages(runpath, h5path,  h5groupstr,  type, typestr, colorrange=No
                 pylab.savefig(str(''.join((runpath, '/',savename1, '.png'))))
                 pylab.cla()
     else:
+        for countsname in ['countsbin3', 'countsbin2', 'counts']:
+            if countsname in h5mar:
+                break
         for pointind in pointlist:
             imname=`pointind`
-            pnnn=h5mar['countsbin3'][pointind, :, :]
+            pnnn=h5mar[countsname][pointind, :, :]
             if extrabin>1:
                 pnnn=binimage(pnnn, bin=extrabin)
             if usebanom:
@@ -2794,6 +2795,9 @@ def linbckndsub1d(h5path, h5groupstr, fraczeroed=0.003, fprecision=0.001, scalar
     ds=h5mar.create_dataset('ibckndadd', data=numpy.array(bcknddata))
     for k, v in saveattrs.iteritems():
         ds.attrs[k]=v
+    
+    updatelog(h5analysis,  ''.join(('1D lin bcknd substraction, all icounts. Finished ',  time.ctime())))
+    
     h5file.close()
 
 #ACTIVEPATH='F:/CHESS2011_h5MAIN/2011Jun01a.h5'

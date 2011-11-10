@@ -1,6 +1,14 @@
 import os
 import h5py
 
+trylist=['C:/Users/Kechao/Desktop/CHESS', 'C:/Users/JohnnyG/Documents/CHESS', '/mnt/hgfs/HostDocuments/CHESS', '']
+for startpath in trylist:
+    if os.path.exists(startpath):
+        break
+if startpath=='':
+    print 'need to add your default start path to the trylist is XRDdefaults.py'
+    raise
+    
 def attrdict_def():
     return {
     'command':'mesh samx start stop numsteps samz ... counter', #this is the string entered to generate the dataset
@@ -54,18 +62,18 @@ def integration_params():
 
 def defaultdir(st):
 #    d={\
-#    'runlog' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010/CHESS2010runlogs', \
-#    'h5' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010/CHESS2010h5analysis', \
-#    'dataimport' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010/CHESS2010h5analysis',  \
-#    'otherdata' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2010',  \
-#    'pdfentries': 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS' \
+#    'runlog' : 'C:/Users/Kechao/Desktop/CHESS/CHESS2010/CHESS2010runlogs', \
+#    'h5' : 'C:/Users/Kechao/Desktop/CHESS/CHESS2010/CHESS2010h5analysis', \
+#    'dataimport' : 'C:/Users/Kechao/Desktop/CHESS/CHESS2010/CHESS2010h5analysis',  \
+#    'otherdata' : 'C:/Users/Kechao/Desktop/CHESS/CHESS2010',  \
+#    'pdfentries': 'C:/Users/Kechao/Desktop/CHESS/CHESSANALYSISARRAYS' \
 #    }
     d={\
-    'runlog' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011/runlogs', \
-    'h5' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011/h5analysis', \
-    'dataimport' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011',  \
-    'otherdata' : 'C:/Users/JohnnyG/Documents/CHESS/CHESS2011',  \
-    'pdfentries': 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS' \
+    'runlog' : os.path.join(startpath,'CHESS2011/runlogs'), \
+    'h5' : os.path.join(startpath,'CHESS2011/h5analysis'), \
+    'dataimport' : os.path.join(startpath,'CHESS2011'),  \
+    'otherdata' : os.path.join(startpath,'CHESS2011'),  \
+    'pdfentries': os.path.join(startpath,'CHESSANALYSISARRAYS') \
     }
 
     if st in d.keys() and os.path.isdir(d[st]):
@@ -79,7 +87,7 @@ def chessrun_def():
 def CHESSRUNFILE(mode='r', returnpathonly=False):
     if mode!='r':
         mode='r+'#to avoid 'w'
-    path='C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/attrs_maps.h5'
+    path=os.path.join(startpath,'CHESSANALYSISARRAYS/attrs_maps.h5')
     if returnpathonly:
         return path
     return h5py.File(path,mode=mode)
@@ -87,26 +95,26 @@ def CHESSRUNFILE(mode='r', returnpathonly=False):
 def WAVESET1dFILE(mode='r'):
     if mode!='r':
         mode='r+'#to avoid 'w'
-    return h5py.File('C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/waveset1d.h5',mode=mode)
+    return h5py.File(os.path.join(startpath,'CHESSANALYSISARRAYS/waveset1d.h5'),mode=mode)
 
 def DEPPROFILETXT():
-    return open('C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/parameter database.txt', "r")
+    return open(os.path.join(startpath,'CHESSANALYSISARRAYS/parameter database.txt'), "r")
 
 
 def PYMCACFGpath(temp=False):
     if temp:
-        return 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/temppymca.cfg'
+        return os.path.join(startpath,'CHESSANALYSISARRAYS/temppymca.cfg')
     else:
-        return 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/pymca.cfg'
+        return os.path.join(startpath,'CHESSANALYSISARRAYS/pymca.cfg')
 
 def ETHRESHYSTARTXT():
-    return open('C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/ElementEthreshYstar.txt', "r")
+    return open(os.path.join(startpath,'CHESSANALYSISARRAYS/ElementEthreshYstar.txt'), "r")
 
 def MINIPROGRAMpath():
-    return 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/miniprogramdatabase.txt'
+    return os.path.join(startpath,'CHESSANALYSISARRAYS/miniprogramdatabase.txt')
 
 def XRFINFOpath():
-    return 'C:/Users/JohnnyG/Documents/CHESS/CHESSANALYSISARRAYS/xrfinfodatabase.txt'
+    return os.path.join(startpath,'CHESSANALYSISARRAYS/xrfinfodatabase.txt')
 
 def XRDgroupnames():
     return ['mar345', 'area_detector']

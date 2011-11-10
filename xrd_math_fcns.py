@@ -171,14 +171,17 @@ def qq_gen(innn): #innn should be array of intensity values dtype='float32'
     zer=numpy.ndarray.tolist(numpy.zeros(slots,  dtype='float32'))
     return numpy.array([zer[:i]+numpy.ndarray.tolist(innn[i]*innn[i:]) for i in xrange(slots)], dtype='float32').T
 
-def intbyarray(data, imap, dqchiimage, slots=None):   #data must be a square array, optionally dtype='uint16', map is same size as data with each pixel value v, v=0->ignored, else included in integration bin v-1
+def intbyarray(data, imap, dqchiimage, slots=None, mean=False):   #data must be a square array, optionally dtype='uint16', map is same size as data with each pixel value v, v=0->ignored, else included in integration bin v-1
     if slots is None:
         slots=imap.max()
     if dqchiimage is None:
         data=numpy.float32(data)
     else:
         data=numpy.float32(numpy.abs(dqchiimage)*data)
-    ans=numpy.array([(data[imap==i]).sum() for i in xrange(1, slots+1, 1)])
+    if mean:
+        ans=numpy.array([(data[imap==i]).mean() for i in xrange(1, slots+1, 1)])
+    else:
+        ans=numpy.array([(data[imap==i]).sum() for i in xrange(1, slots+1, 1)])
     ans[numpy.where(numpy.isnan(ans))]=0.0
     return ans
 
@@ -2100,13 +2103,30 @@ def dezing(arr,critval=None):
     arr[c0,c1]=(arr[c0-1,c1]+arr[c0+1,c1]+arr[c0,c1-1]+arr[c0,c1+1])/4
     return arr
 
-def removesinglepixoutliers(arr,critratiotoneighbors=1.5):
+def removesinglepixoutliers(arr,critratiotoneighbors=1.5, removepctilebeforeratio=None, returninds=False):
     #c=numpy.where(arr[1:-1,1:-1]>(critratiotoneighbors*(arr[:-2,1:-1]+arr[2:,1:-1]+arr[1:-1,:-2]+arr[1:-1,2:])))
-    c=numpy.where((arr[1:-1,1:-1]>(critratiotoneighbors*arr[:-2,1:-1]))*(arr[1:-1,1:-1]>(critratiotoneighbors*arr[2:,1:-1]))*(arr[1:-1,1:-1]>(critratiotoneighbors*arr[1:-1,:-2]))*(arr[1:-1,1:-1]>(critratiotoneighbors*arr[1:-1,2:])))
+    if removepctilebeforeratio is None:
+        c=numpy.where((arr[1:-1,1:-1]>(critratiotoneighbors*arr[:-2,1:-1]))*\
+                                 (arr[1:-1,1:-1]>(critratiotoneighbors*arr[2:,1:-1]))*\
+                                 (arr[1:-1,1:-1]>(critratiotoneighbors*arr[1:-1,:-2]))*\
+                                 (arr[1:-1,1:-1]>(critratiotoneighbors*arr[1:-1,2:])))
+    else:
+        arr2=copy.copy(arr)
+        temp=numpy.sort(arr2.flatten())
+        v=temp[removepctilebeforeratio*arr2.size//1]
+        print 'subtracting ',  v, ' before removing outliers'
+        arr2-=v
+        arr2[arr<v]=0#to avoid problems with negative subtraction result in uint arrays
+        c=numpy.where((arr2[1:-1,1:-1]>(critratiotoneighbors*arr2[:-2,1:-1]))*\
+                                 (arr2[1:-1,1:-1]>(critratiotoneighbors*arr2[2:,1:-1]))*\
+                                 (arr2[1:-1,1:-1]>(critratiotoneighbors*arr2[1:-1,:-2]))*\
+                                 (arr2[1:-1,1:-1]>(critratiotoneighbors*arr2[1:-1,2:])))
     c0=c[0]+1
     c1=c[1]+1
     print len(c0), ' pixels being replaced'
     arr[c0,c1]=(arr[c0-1,c1]+arr[c0+1,c1]+arr[c0,c1-1]+arr[c0,c1+1])/4
+    if returninds:
+        return arr, (c0, c1)
     return arr
 
 def readh5pyarray(arrpoint):

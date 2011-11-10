@@ -3343,7 +3343,8 @@ class importattrDialog(QDialog,
             else:
                 self.integLabel.setText('integration\ntime (s)')
         except (SyntaxError, NameError, IndexError):
-            QMessageBox.warning(self,"syntax error",  "grid values were not generated")
+            #QMessageBox.warning(self,"syntax error",  "grid values were not generated")
+            print 'grid values were not generated'
             pass
 
 
@@ -3490,25 +3491,28 @@ class plot2dintwindow(QDialog):
         self.chimapbin=getchimapchigrid(h5analysis.attrs['chimapstr'], chigrid=False, bin=self.bin)
 
         self.bcknd=attrdict['bcknd']
-        if 'lin' in self.bcknd:
-            self.bckndarr, self.blinwts=readblin(h5mar)
-            self.bckndarrbin, self.blinwts=readblin(h5mar, bin=self.bin)
-        else:
-            bstr=''.join(('b', self.bcknd[:3]))
-            self.bckndarr=readh5pyarray(h5mar[bstr])
-            bstr=''.join((bstr, 'bin%d' %self.bin))
-            self.bckndarrbin=readh5pyarray(h5mar[bstr])
-
-        if self.bcknd=='minanom':
-            if 'bimap' in h5mar:
-                bimap=readh5pyarray(h5mar['bimap'])
-                bqgrid=h5mar['bimap'].attrs['bqgrid']
+        try:
+            if 'lin' in self.bcknd:
+                self.bckndarr, self.blinwts=readblin(h5mar)
+                self.bckndarrbin, self.blinwts=readblin(h5mar, bin=self.bin)
             else:
-                bimap=None
-                bqgrid=None
-            self.banomcalc=(self.imapbin, self.qgrid, attrdict, bimap, bqgrid)
-            self.bminanomf=readh5pyarray(h5mar['bminanomf'])
+                bstr=''.join(('b', self.bcknd[:3]))
+                self.bckndarr=readh5pyarray(h5mar[bstr])
+                bstr=''.join((bstr, 'bin%d' %self.bin))
+                self.bckndarrbin=readh5pyarray(h5mar[bstr])
 
+            if self.bcknd=='minanom':
+                if 'bimap' in h5mar:
+                    bimap=readh5pyarray(h5mar['bimap'])
+                    bqgrid=h5mar['bimap'].attrs['bqgrid']
+                else:
+                    bimap=None
+                    bqgrid=None
+                self.banomcalc=(self.imapbin, self.qgrid, attrdict, bimap, bqgrid)
+                self.bminanomf=readh5pyarray(h5mar['bminanomf'])
+            bckndexists=True
+        except:
+            bckndexists=False
         h5file.close()
 
         self.imnumlist=self.pointlist[:]
@@ -3540,13 +3544,18 @@ class plot2dintwindow(QDialog):
         self.binCheckBox.setChecked(True)
         QObject.connect(self.binCheckBox,SIGNAL("stateChanged()"),self.fillimComboBox)
 
-
         self.bckndCheckBox=QCheckBox()
         self.bckndCheckBox.setText('subtract background')
-        self.bckndCheckBox.setChecked(True)
+        self.bckndCheckBox.setChecked(bckndexists)
+        self.bckndCheckBox.setEnabled(bckndexists)
         self.drawbckndButton=QPushButton()
         self.drawbckndButton.setText('draw bcknd')
-        QObject.connect(self.drawbckndButton,SIGNAL("pressed()"),self.drawbcknd)
+        if bckndexists:
+            QObject.connect(self.drawbckndButton,SIGNAL("pressed()"),self.drawbcknd)
+        else:
+            def msg():
+                print 'NO BACKND FOUNTD SO IGNORING PLOT REQUEST'
+            QObject.connect(self.drawbckndButton,SIGNAL("pressed()"), msg)
         self.imComboBox=QComboBox()
         self.imComboBox.setToolTip('spec index of image to be plotted')
         self.drawButton=QPushButton()
@@ -5052,6 +5061,8 @@ class plot1dintwindow(QDialog):
             self.imnamelist+=['i%d' %p for p in self.pointlist]
         if 'ifcounts' in h5file[self.h5datagrpstr]:
             self.imnamelist+=['if%d' %p for p in self.pointlist]
+        if 'idcounts' in h5file[self.h5datagrpstr]:
+            self.imnamelist+=['id%d' %p for p in self.pointlist]
         for node in h5file[self.h5datagrpstr].iterobjects():
             if (node.name.rpartition('/')[2]).startswith('i') and isinstance(node, h5py.Dataset) and len(node.shape)==1:
                 self.imnamelist+=[node.name.rpartition('/')[2]]
@@ -5354,6 +5365,8 @@ class plot1dintwindow(QDialog):
 
         if self.imname.startswith('if') and self.imname[2:].isdigit():
             self.imnum=eval(self.imname[2:])
+        elif self.imname.startswith('id') and self.imname[2:].isdigit():
+            self.imnum=eval(self.imname[2:])
         elif self.imname.startswith('i') and self.imname[1:].isdigit():
             self.imnum=eval(self.imname[1:])
 
@@ -5387,6 +5400,8 @@ class plot1dintwindow(QDialog):
     def drawwithpeaks(self):
         self.imname=unicode(self.imComboBox.currentText())
         if self.imname.startswith('if'):
+            temp=self.imname[2:]
+        elif self.imname.startswith('id'):
             temp=self.imname[2:]
         else:
             temp=self.imname[1:]
@@ -5447,6 +5462,9 @@ class plot1dintwindow(QDialog):
         if self.imname.startswith('if'):
             temp=self.imname[2:]
             h5counts=h5file[self.h5datagrpstr]['ifcounts']
+        elif self.imname.startswith('id'):
+            temp=self.imname[2:]
+            h5counts=h5file[self.h5datagrpstr]['idcounts']
         else:
             temp=self.imname[1:]
             h5counts=h5file[self.h5datagrpstr]['icounts']
@@ -5541,11 +5559,15 @@ class plot1dintwindow(QDialog):
         self.imname=unicode(self.imComboBox.currentText())
         if self.imname.startswith('if'):
             temp=self.imname[2:]
+            icmd="h5file[self.h5datagrpstr]['ifcounts'][self.imnum,:]"
+        elif self.imname.startswith('id'):
+            temp=self.imname[2:]
+            icmd="h5file[self.h5datagrpstr]['idcounts'][self.imnum,:]"
         else:
             temp=self.imname[1:]
+            icmd="h5file[self.h5datagrpstr]['icounts'][self.imnum,:]"
         if temp.isdigit():
             self.imnum=eval(temp)
-            icmd="h5file[self.h5datagrpstr]['ifcounts'][self.imnum,:]"
         else:
             icmd="h5file[self.h5datagrpstr][temp][:]"
 
