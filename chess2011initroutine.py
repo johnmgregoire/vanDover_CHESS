@@ -91,7 +91,12 @@ def chessbatch2011init(h5path,critratiotoneighbors=3.,  removepctilebeforeratio=
         if not xrdname in h5analysis:
             h5analysis.create_group(xrdname)
         h5analysis=h5file['/'.join((h5groupstr, 'analysis'))]
-        h5marcounts=h5file['/'.join((h5groupstr,'measurement/'+getxrdname(h5analysis)+'/counts'))]
+        try:
+            h5marcounts=h5file['/'.join((h5groupstr,'measurement', getxrdname(h5analysis),'counts'))]
+        except:
+            print 'no counts found for ', h5groupstr
+            h5file.close()
+            continue
         attrdict=getattr(h5path, h5groupstr)
         pointlist=range(h5marcounts.shape[0])
         h5analysis.attrs['pointlist']=pointlist
