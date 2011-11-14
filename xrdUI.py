@@ -5063,6 +5063,8 @@ class plot1dintwindow(QDialog):
             self.imnamelist+=['if%d' %p for p in self.pointlist]
         if 'idcounts' in h5file[self.h5datagrpstr]:
             self.imnamelist+=['id%d' %p for p in self.pointlist]
+        if 'imcounts' in h5file[self.h5datagrpstr]:
+            self.imnamelist+=['im%d' %p for p in self.pointlist]
         for node in h5file[self.h5datagrpstr].iterobjects():
             if (node.name.rpartition('/')[2]).startswith('i') and isinstance(node, h5py.Dataset) and len(node.shape)==1:
                 self.imnamelist+=[node.name.rpartition('/')[2]]
@@ -5367,6 +5369,8 @@ class plot1dintwindow(QDialog):
             self.imnum=eval(self.imname[2:])
         elif self.imname.startswith('id') and self.imname[2:].isdigit():
             self.imnum=eval(self.imname[2:])
+        elif self.imname.startswith('im') and self.imname[2:].isdigit():
+            self.imnum=eval(self.imname[2:])
         elif self.imname.startswith('i') and self.imname[1:].isdigit():
             self.imnum=eval(self.imname[1:])
 
@@ -5402,6 +5406,8 @@ class plot1dintwindow(QDialog):
         if self.imname.startswith('if'):
             temp=self.imname[2:]
         elif self.imname.startswith('id'):
+            temp=self.imname[2:]
+        elif self.imname.startswith('im'):
             temp=self.imname[2:]
         else:
             temp=self.imname[1:]
@@ -5465,6 +5471,9 @@ class plot1dintwindow(QDialog):
         elif self.imname.startswith('id'):
             temp=self.imname[2:]
             h5counts=h5file[self.h5datagrpstr]['idcounts']
+        elif self.imname.startswith('im'):
+            temp=self.imname[2:]
+            h5counts=h5file[self.h5datagrpstr]['imcounts']
         else:
             temp=self.imname[1:]
             h5counts=h5file[self.h5datagrpstr]['icounts']
@@ -5563,6 +5572,9 @@ class plot1dintwindow(QDialog):
         elif self.imname.startswith('id'):
             temp=self.imname[2:]
             icmd="h5file[self.h5datagrpstr]['idcounts'][self.imnum,:]"
+        elif self.imname.startswith('im'):
+            temp=self.imname[2:]
+            icmd="h5file[self.h5datagrpstr]['imcounts'][self.imnum,:]"
         else:
             temp=self.imname[1:]
             icmd="h5file[self.h5datagrpstr]['icounts'][self.imnum,:]"
@@ -7162,6 +7174,10 @@ class plotinterpimageof1ddatawindow(QDialog):
                 self.xrdtypeComboBox.insertItem(999, 'icounts')
             if 'ifcounts' in h5file[self.h5datagrpstr]:
                 self.xrdtypeComboBox.insertItem(999, 'ifcounts')
+            if 'idcounts' in h5file[self.h5datagrpstr]:
+                self.xrdtypeComboBox.insertItem(999, 'idcounts')
+            if 'imcounts' in h5file[self.h5datagrpstr]:
+                self.xrdtypeComboBox.insertItem(999, 'imcounts')
                 self.xrdtypeComboBox.setCurrentIndex(1)
         if self.texturestyle:
             self.killmap=getkillmap(h5analysis.attrs['killmapstr'])
@@ -8006,6 +8022,10 @@ class plotinterpimageof1ddatawindow(QDialog):
             datatypestr=unicode(self.xrdtypeComboBox.currentText())
             if datatypestr=='ifcounts':
                 counts=readh5pyarray(h5file[self.h5datagrpstr]['ifcounts'])[selectlist][:, qindarr]
+            elif datatypestr=='idcounts':
+                counts=readh5pyarray(h5file[self.h5datagrpstr]['idcounts'])[selectlist][:, qindarr]
+            elif datatypestr=='imcounts':
+                counts=readh5pyarray(h5file[self.h5datagrpstr]['imcounts'])[selectlist][:, qindarr]
             else:
                 counts=readh5pyarray(h5file[self.h5datagrpstr]['icounts'])[selectlist][:, qindarr]
 
@@ -8445,6 +8465,10 @@ class plotinterpimageof1ddatawindow(QDialog):
             datatypestr=unicode(self.xrdtypeComboBox.currentText())
             if datatypestr=='ifcounts':
                 counts=readh5pyarray(h5file[self.h5datagrpstr]['ifcounts'])[selectlist]
+            elif datatypestr=='idcounts':
+                counts=readh5pyarray(h5file[self.h5datagrpstr]['idcounts'])[selectlist]
+            elif datatypestr=='imcounts':
+                counts=readh5pyarray(h5file[self.h5datagrpstr]['imcounts'])[selectlist]
             else:
                 counts=readh5pyarray(h5file[self.h5datagrpstr]['icounts'])[selectlist]
 

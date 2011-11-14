@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Project SYSTEM "Project-4.6.dtd">
 <!-- eric4 project file for project XRDproject -->
-<!-- Saved: 2010-06-14, 16:35:51 -->
-<!-- Copyright (C) 2010 ,  -->
+<!-- Saved: 2011-11-10, 13:56:27 -->
+<!-- Copyright (C) 2011 ,  -->
 <Project version="4.6">
   <Language></Language>
   <ProgLanguage mixed="0">Python</ProgLanguage>
@@ -21,6 +21,9 @@
     <Source>xrdUI.py</Source>
     <Source>xrf_analysis.py</Source>
     <Source>xrf_depprof.py</Source>
+    <Source>diffcountsfcn3.py</Source>
+    <Source>diffcountsfcn2.py</Source>
+    <Source>chess2011initroutine.py</Source>
   </Sources>
   <Forms>
   </Forms>
